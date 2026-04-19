@@ -1,0 +1,7 @@
+/src/writable/*
+!/src/writable/index.html
+!/src/writable/.htaccess
+/src/vendor/
+/src/.env
+.docker/
+sql-imports/
