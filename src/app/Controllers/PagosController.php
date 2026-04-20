@@ -86,7 +86,21 @@ class PagosController extends BaseController
         $model = new PagoModel();
 
         if (! $model->insert($data)) {
+            if ($this->request->isAJAX()) {
+                return $this->response->setStatusCode(422)->setJSON([
+                    'success' => false,
+                    'message' => 'Error al guardar el pago. Intente de nuevo.',
+                ]);
+            }
             return view('pagos/registro', ['error' => 'Error al guardar el pago. Intente de nuevo.']);
+        }
+
+        if ($this->request->isAJAX()) {
+            return $this->response->setJSON([
+                'success'   => true,
+                'csrf_name' => csrf_token(),
+                'csrf_hash' => csrf_hash(),
+            ]);
         }
 
         return redirect()->to(base_url('pagos'))->with('success', '¡Pago registrado correctamente!');

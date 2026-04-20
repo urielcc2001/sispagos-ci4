@@ -7,6 +7,7 @@
   <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Source+Sans+Pro:300,400,400i,700&display=fallback">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css">
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/admin-lte@3.2/dist/css/adminlte.min.css">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/sweetalert2@11/dist/sweetalert2.min.css">
 </head>
 <body class="hold-transition sidebar-mini layout-fixed">
 <div class="wrapper">
@@ -241,11 +242,58 @@
     <strong>SistemaPagos</strong> &copy; <?= date('Y') ?>
   </footer>
 
+<!-- Modal de Confirmación de Pago -->
+<div class="modal fade" id="modal-confirmar" tabindex="-1" role="dialog" aria-labelledby="modal-confirmar-label" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered" role="document">
+    <div class="modal-content">
+      <div class="modal-header bg-primary">
+        <h5 class="modal-title text-white" id="modal-confirmar-label">
+          <i class="fas fa-file-invoice-dollar mr-2"></i>Confirmar Registro de Pago
+        </h5>
+        <button type="button" class="close text-white" data-dismiss="modal" aria-label="Cerrar">
+          <span aria-hidden="true">&times;</span>
+        </button>
+      </div>
+      <div class="modal-body">
+        <p class="text-muted mb-3">¿Confirmas el registro del siguiente pago?</p>
+        <table class="table table-sm table-borderless mb-0">
+          <tbody>
+            <tr>
+              <th class="text-right text-muted pr-3" style="width:35%">Alumno</th>
+              <td id="modal-nombre" class="font-weight-bold"></td>
+            </tr>
+            <tr>
+              <th class="text-right text-muted pr-3">Nivel</th>
+              <td id="modal-nivel"></td>
+            </tr>
+            <tr>
+              <th class="text-right text-muted pr-3">Concepto</th>
+              <td id="modal-concepto"></td>
+            </tr>
+            <tr class="table-success">
+              <th class="text-right text-muted pr-3">Monto</th>
+              <td id="modal-monto" class="font-weight-bold text-success" style="font-size:1.15rem"></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-default" data-dismiss="modal">
+          <i class="fas fa-times mr-1"></i> Cancelar
+        </button>
+        <button type="button" class="btn btn-primary" id="btn-confirmar">
+          <i class="fas fa-check mr-1"></i> Confirmar
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
 </div><!-- /.wrapper -->
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.6.0/jquery.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@4.6.1/dist/js/bootstrap.bundle.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/admin-lte@3.2/dist/js/adminlte.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11/dist/sweetalert2.all.min.js"></script>
 <script>
 const BASE_URL = '<?= base_url() ?>';
 
@@ -260,7 +308,6 @@ $(function () {
     const esUni      = nivel === 'uni';
     const esPosgrado = nivel === 'posgrado';
 
-    // Nombre: editable solo para posgrado (sin AJAX disponible)
     $('#nombre_alumno').prop('readonly', !esPosgrado);
 
     $('#grupo-modalidad-sel').toggle(esPosgrado);
@@ -330,6 +377,69 @@ $(function () {
       $('#grupo-modalidad-sel, #grupo-carrera, #grupo-modalidad-txt, #grupo-tramite').hide();
       $('#nombre_alumno').prop('readonly', true).removeClass('is-valid is-invalid');
     }, 10);
+  });
+
+  // ── Interceptar submit → Modal de confirmación ─────────────────
+  $('#form-pago').on('submit', function (e) {
+    e.preventDefault();
+
+    const nombre  = $('#nombre_alumno').val().trim();
+    const nivel   = $('#nivel option:selected').text().trim();
+    const concepto = $('#concepto option:selected').text().trim();
+    const tramite  = $('#detalle_tramite option:selected').text().trim();
+    const montoRaw = parseFloat($('#monto').val()) || 0;
+    const monto    = montoRaw.toLocaleString('es-MX', { style: 'currency', currency: 'MXN' });
+
+    let conceptoDisplay = concepto;
+    if ($('#concepto').val() === 'tramite' && tramite) {
+      conceptoDisplay = tramite;
+    }
+
+    $('#modal-nombre').text(nombre   || '—');
+    $('#modal-nivel').text(nivel     || '—');
+    $('#modal-concepto').text(conceptoDisplay || '—');
+    $('#modal-monto').text(monto);
+
+    $('#modal-confirmar').modal('show');
+  });
+
+  // ── Confirmar → AJAX ────────────────────────────────────────────
+  $('#btn-confirmar').on('click', function () {
+    const $btn = $(this);
+    $btn.prop('disabled', true).html('<i class="fas fa-spinner fa-spin mr-1"></i> Procesando...');
+
+    $.ajax({
+      url    : BASE_URL + 'pagos/registrar',
+      method : 'POST',
+      data   : $('#form-pago').serialize(),
+      headers: { 'X-Requested-With': 'XMLHttpRequest' },
+      success: function (res) {
+        // Renovar token CSRF para el siguiente envío
+        $('input[name="' + res.csrf_name + '"]').val(res.csrf_hash);
+
+        $('#modal-confirmar').modal('hide');
+        $('#form-pago').trigger('reset');
+
+        Swal.fire({
+          icon             : 'success',
+          title            : '¡Pago registrado!',
+          text             : 'El pago se registró correctamente.',
+          timer            : 2500,
+          timerProgressBar : true,
+          showConfirmButton: false,
+        }).then(function () {
+          $('#num_control').focus();
+        });
+      },
+      error: function (xhr) {
+        const msg = xhr.responseJSON?.message ?? 'Error al registrar el pago. Intente de nuevo.';
+        $('#modal-confirmar').modal('hide');
+        Swal.fire({ icon: 'error', title: 'Error', text: msg });
+      },
+      complete: function () {
+        $btn.prop('disabled', false).html('<i class="fas fa-check mr-1"></i> Confirmar');
+      },
+    });
   });
 
   // ── Helpers ─────────────────────────────────────────────────────

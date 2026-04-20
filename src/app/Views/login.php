@@ -15,7 +15,7 @@
   </div>
   <div class="card">
     <div class="card-body login-card-body">
-      <p class="login-box-msg">Ingresa tus credenciales de Cajero</p>
+      <p class="login-box-msg">Ingresa sus credenciales</p>
 
       <?php if (isset($error)): ?>
         <div class="alert alert-danger"><?= esc($error) ?></div>
