@@ -12,3 +12,6 @@ $routes->post('auth/login', 'Auth::login');
 $routes->get('pagos', 'PagosController::index');
 $routes->get('pagos/buscar-alumno', 'PagosController::buscarAlumno');
 $routes->post('pagos/registrar', 'PagosController::registrar');
+$routes->get('pagos/comprobante/(:segment)', 'PagosController::comprobante/$1');
+
+$routes->get('dashboard', 'AdminController::dashboard');

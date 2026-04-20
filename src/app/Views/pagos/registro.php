@@ -44,6 +44,14 @@
     <div class="sidebar">
       <nav class="mt-2">
         <ul class="nav nav-pills nav-sidebar flex-column" data-widget="treeview" role="menu">
+          <?php if (service('session')->get('rol') === 'admin'): ?>
+          <li class="nav-item">
+            <a href="<?= base_url('dashboard') ?>" class="nav-link">
+              <i class="nav-icon fas fa-tachometer-alt"></i>
+              <p>Dashboard</p>
+            </a>
+          </li>
+          <?php endif; ?>
           <li class="nav-item">
             <a href="<?= base_url('pagos') ?>" class="nav-link active">
               <i class="nav-icon fas fa-money-bill-wave"></i>
@@ -423,11 +431,12 @@ $(function () {
         Swal.fire({
           icon             : 'success',
           title            : '¡Pago registrado!',
-          text             : 'El pago se registró correctamente.',
-          timer            : 2500,
+          html             : 'Folio: <strong>' + res.folio_digital + '</strong><br>Se abrirá el comprobante en una nueva pestaña.',
+          timer            : 3000,
           timerProgressBar : true,
           showConfirmButton: false,
         }).then(function () {
+          window.open(res.pdf_url, '_blank');
           $('#num_control').focus();
         });
       },

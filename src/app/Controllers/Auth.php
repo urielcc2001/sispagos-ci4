@@ -31,6 +31,10 @@ class Auth extends BaseController
             'logged_in'  => true,
         ]);
 
-        return redirect()->to(base_url('dashboard'));
+        if (session()->get('rol') == 'admin') {
+            return redirect()->to('/dashboard');
+        } else {
+            return redirect()->to('/pagos');
+        }
     }
 }
