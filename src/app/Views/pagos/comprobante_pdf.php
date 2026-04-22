@@ -128,7 +128,7 @@ body {
     vertical-align: middle;
 }
 .monto-num {
-    font-size: 17pt;
+    font-size: 16pt;
     font-weight: bold;
     color: #003087;
 }
@@ -154,6 +154,18 @@ body {
     width: 130pt;
     margin-top: 22pt;
     margin-bottom: 2pt;
+}
+
+/* ── Sello digital ──────────────────────────── */
+.sello-digital {
+    margin-top: 7pt;
+    padding-top: 5pt;
+    border-top: 0.5pt solid #ddd;
+    font-size: 6pt;
+    color: #bbb;
+    word-wrap: break-word;
+    word-break: break-all;
+    line-height: 1.5;
 }
 </style>
 </head>
@@ -218,8 +230,14 @@ foreach ($copias as $copia):
       <td class="val"><?= esc($pago['modalidad'] ?? '—') ?></td>
     </tr>
     <tr>
+      <td class="lbl">Periodo</td>
+      <td class="val" style="font-weight:bold;">
+        <?= !empty($pago['periodo_pago']) ? esc($pago['periodo_pago']) : '—' ?>
+      </td>
       <td class="lbl">Cajero</td>
-      <td class="val" colspan="3"><?= esc($nombreCajero) ?></td>
+      <td class="val">
+        <?= esc($nombreCajero) ?>
+      </td>
     </tr>
   </table>
 
@@ -246,6 +264,11 @@ foreach ($copias as $copia):
       </td>
     </tr>
   </table>
+
+  <!-- Sello Digital de Seguridad -->
+  <div class="sello-digital">
+    <strong>SELLO DIGITAL:</strong> <?= esc($selloDigital) ?>
+  </div>
 
 </div>
 <!-- fin sección -->

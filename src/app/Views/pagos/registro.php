@@ -58,6 +58,14 @@
               <p>Registrar Pago</p>
             </a>
           </li>
+          <?php if (service('session')->get('rol') === 'admin'): ?>
+          <li class="nav-item">
+            <a href="<?= base_url('admin/reportes') ?>" class="nav-link">
+              <i class="nav-icon fas fa-chart-bar"></i>
+              <p>Reportes</p>
+            </a>
+          </li>
+          <?php endif; ?>
         </ul>
       </nav>
     </div>
@@ -200,16 +208,25 @@
                   </div>
                 </div>
 
-                <!-- Solo visible cuando concepto = tramite -->
+                <!-- Solo visible cuando concepto = tramite (opciones cargadas por AJAX) -->
                 <div class="col-md-4" id="grupo-tramite" style="display:none">
                   <div class="form-group">
                     <label for="detalle_tramite">Tipo de Trámite <span class="text-danger">*</span></label>
                     <select name="detalle_tramite" id="detalle_tramite" class="form-control">
+                      <option value="">— Selecciona nivel primero —</option>
+                    </select>
+                    <small id="msg-tramites" class="text-muted" style="display:none">
+                      <i class="fas fa-spinner fa-spin mr-1"></i> Cargando trámites…
+                    </small>
+                  </div>
+                </div>
+
+                <!-- Visible según nivel + concepto (mensualidad → mes; inscripción/reinscripción → periodo semestral/cuatrimestral) -->
+                <div class="col-md-3" id="grupo-periodo" style="display:none">
+                  <div class="form-group">
+                    <label for="periodo_pago" id="label-periodo">Periodo <span class="text-danger">*</span></label>
+                    <select name="periodo_pago" id="periodo_pago" class="form-control">
                       <option value="">— Selecciona —</option>
-                      <option value="constancia"    data-monto="150.00">Constancia Escolar — $150</option>
-                      <option value="constancia_ext" data-monto="50.00">Constancia Extranjero — $50</option>
-                      <option value="historial"     data-monto="150.00">Historial de Calificaciones — $150</option>
-                      <option value="gafete"        data-monto="30.00" >Gafete — $30</option>
                     </select>
                   </div>
                 </div>
@@ -278,6 +295,10 @@
               <th class="text-right text-muted pr-3">Concepto</th>
               <td id="modal-concepto"></td>
             </tr>
+            <tr id="fila-modal-periodo" style="display:none">
+              <th class="text-right text-muted pr-3">Periodo</th>
+              <td id="modal-periodo"></td>
+            </tr>
             <tr class="table-success">
               <th class="text-right text-muted pr-3">Monto</th>
               <td id="modal-monto" class="font-weight-bold text-success" style="font-size:1.15rem"></td>
@@ -324,6 +345,10 @@ $(function () {
 
     $('#sel-modalidad').val('');
     $('#modalidad_val').val('');
+    actualizarPeriodo();
+    if ($('#concepto').val() === 'tramite') {
+      cargarTramites();
+    }
   });
 
   // ── Modalidad posgrado → campo oculto ──────────────────────────
@@ -362,28 +387,33 @@ $(function () {
       });
   });
 
-  // ── Concepto → mostrar/ocultar trámite ─────────────────────────
+  // ── Concepto → mostrar/ocultar trámite + periodo ───────────────
   $('#concepto').on('change', function () {
     const esTramite = $(this).val() === 'tramite';
     $('#grupo-tramite').toggle(esTramite);
-    if (!esTramite) {
+    if (esTramite) {
+      cargarTramites();
+      $('#monto').val('');
+    } else {
       $('#detalle_tramite').val('');
       $('#monto').val('');
     }
+    actualizarPeriodo();
   });
 
-  // ── Detalle trámite → sugerir monto ────────────────────────────
+  // ── Detalle trámite → sugerir precio ───────────────────────────
   $('#detalle_tramite').on('change', function () {
-    const monto = $(this).find(':selected').data('monto');
-    if (monto) $('#monto').val(monto);
+    const precio = $(this).find(':selected').data('precio');
+    if (precio) $('#monto').val(parseFloat(precio).toFixed(2));
   });
 
   // ── Reset form ──────────────────────────────────────────────────
   $('#form-pago').on('reset', function () {
     setTimeout(function () {
       resetAlumnoFields();
-      $('#grupo-modalidad-sel, #grupo-carrera, #grupo-modalidad-txt, #grupo-tramite').hide();
+      $('#grupo-modalidad-sel, #grupo-carrera, #grupo-modalidad-txt, #grupo-tramite, #grupo-periodo').hide();
       $('#nombre_alumno').prop('readonly', true).removeClass('is-valid is-invalid');
+      $('#periodo_pago').val('').prop('required', false);
     }, 10);
   });
 
@@ -395,6 +425,7 @@ $(function () {
     const nivel   = $('#nivel option:selected').text().trim();
     const concepto = $('#concepto option:selected').text().trim();
     const tramite  = $('#detalle_tramite option:selected').text().trim();
+    const periodo  = $('#periodo_pago option:selected').text().trim();
     const montoRaw = parseFloat($('#monto').val()) || 0;
     const monto    = montoRaw.toLocaleString('es-MX', { style: 'currency', currency: 'MXN' });
 
@@ -403,9 +434,12 @@ $(function () {
       conceptoDisplay = tramite;
     }
 
+    const tienePeriodo = $('#grupo-periodo').is(':visible') && periodo && periodo !== '— Selecciona —';
     $('#modal-nombre').text(nombre   || '—');
     $('#modal-nivel').text(nivel     || '—');
     $('#modal-concepto').text(conceptoDisplay || '—');
+    $('#fila-modal-periodo').toggle(tienePeriodo);
+    $('#modal-periodo').text(tienePeriodo ? periodo : '');
     $('#modal-monto').text(monto);
 
     $('#modal-confirmar').modal('show');
@@ -450,6 +484,81 @@ $(function () {
       },
     });
   });
+
+  // ── Carga dinámica de trámites ──────────────────────────────────
+  function cargarTramites() {
+    const nivel   = $('#nivel').val();
+    const $select = $('#detalle_tramite');
+    const $msg    = $('#msg-tramites');
+
+    $select.empty().append('<option value="">— Cargando… —</option>').prop('disabled', true);
+    $msg.show();
+
+    $.get(BASE_URL + 'pagos/tramites-disponibles', { nivel: nivel })
+      .done(function (tramites) {
+        $select.empty().append('<option value="">— Selecciona trámite —</option>');
+        if (tramites.length === 0) {
+          $select.append('<option value="" disabled>Sin trámites disponibles para este nivel</option>');
+        } else {
+          tramites.forEach(function (t) {
+            const precio  = parseFloat(t.precio_sugerido).toFixed(2);
+            const label   = t.nombre_tramite + ' — $' + precio;
+            $select.append('<option value="' + t.nombre_tramite + '" data-precio="' + precio + '">' + label + '</option>');
+          });
+        }
+        $select.prop('disabled', false);
+      })
+      .fail(function () {
+        $select.empty().append('<option value="">Error al cargar trámites</option>').prop('disabled', false);
+      })
+      .always(function () { $msg.hide(); });
+  }
+
+  // ── Periodo de pago ─────────────────────────────────────────────
+  function actualizarPeriodo() {
+    const nivel    = $('#nivel').val();
+    const concepto = $('#concepto').val();
+    const $grupo   = $('#grupo-periodo');
+    const $select  = $('#periodo_pago');
+
+    if (!nivel || !concepto || concepto === 'tramite' || nivel === 'posgrado') {
+      $grupo.hide();
+      $select.val('').prop('required', false);
+      return;
+    }
+
+    $select.find('option:not(:first)').remove();
+
+    const anio = new Date().getFullYear();
+
+    if (concepto === 'mensualidad') {
+      $('#label-periodo').text('Mes a pagar *');
+      ['Enero','Febrero','Marzo','Abril','Mayo','Junio',
+       'Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre']
+        .forEach(function (m) {
+          const v = m + ' ' + anio;
+          $select.append('<option value="' + v + '">' + v + '</option>');
+        });
+    } else {
+      $('#label-periodo').text('Periodo *');
+      if (nivel === 'prepa') {
+        ['Agosto - Diciembre', 'Enero - Julio']
+          .forEach(function (p) {
+            const v = p + ' ' + anio;
+            $select.append('<option value="' + v + '">' + v + '</option>');
+          });
+      } else {
+        ['Enero - Abril', 'Mayo - Agosto', 'Septiembre - Diciembre']
+          .forEach(function (p) {
+            const v = p + ' ' + anio;
+            $select.append('<option value="' + v + '">' + v + '</option>');
+          });
+      }
+    }
+
+    $grupo.show();
+    $select.prop('required', true);
+  }
 
   // ── Helpers ─────────────────────────────────────────────────────
   function resetAlumnoFields() {

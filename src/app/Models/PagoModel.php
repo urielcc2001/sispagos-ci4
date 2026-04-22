@@ -11,7 +11,7 @@ class PagoModel extends Model
     protected $returnType    = 'array';
     protected $useTimestamps = true;
     protected $allowedFields = [
-        'folio_digital', 'num_control', 'nivel', 'nombre_alumno', 'modalidad',
-        'carrera', 'concepto', 'detalle_tramite', 'monto', 'id_cajero',
+        'folio_digital', 'sello_digital', 'num_control', 'nivel', 'nombre_alumno', 'modalidad',
+        'carrera', 'concepto', 'detalle_tramite', 'periodo_pago', 'monto', 'id_cajero',
     ];
 }

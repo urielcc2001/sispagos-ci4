@@ -56,6 +56,18 @@
               <p>Registrar Pago</p>
             </a>
           </li>
+          <li class="nav-item">
+            <a href="<?= base_url('admin/reportes') ?>" class="nav-link">
+              <i class="nav-icon fas fa-chart-bar"></i>
+              <p>Reportes</p>
+            </a>
+          </li>
+          <li class="nav-item">
+            <a href="<?= base_url('admin/conceptos') ?>" class="nav-link">
+              <i class="nav-icon fas fa-cogs"></i>
+              <p>Conceptos</p>
+            </a>
+          </li>
         </ul>
       </nav>
     </div>
@@ -196,17 +208,27 @@
                       <td class="text-nowrap text-muted" style="font-size:0.82rem;">
                         <?= date('d/m/Y H:i', strtotime($p['created_at'])) ?>
                       </td>
-                      <td class="text-center">
+                      <td class="text-center text-nowrap">
                         <?php if (! empty($p['folio_digital'])): ?>
                           <a href="<?= base_url('pagos/comprobante/' . esc($p['folio_digital'])) ?>"
                              target="_blank"
                              class="btn btn-xs btn-outline-secondary"
                              title="Reimprimir comprobante">
-                            <i class="fas fa-print mr-1"></i>Reimprimir
+                            <i class="fas fa-print"></i>
                           </a>
-                        <?php else: ?>
-                          <span class="text-muted">—</span>
                         <?php endif; ?>
+                        <a href="<?= base_url('admin/pagos/' . $p['id'] . '/editar') ?>"
+                           class="btn btn-xs btn-outline-warning"
+                           title="Editar pago">
+                          <i class="fas fa-pencil-alt"></i>
+                        </a>
+                        <button type="button"
+                                class="btn btn-xs btn-outline-danger btn-eliminar"
+                                data-id="<?= $p['id'] ?>"
+                                data-folio="<?= esc($p['folio_digital'] ?? $p['id']) ?>"
+                                title="Eliminar pago">
+                          <i class="fas fa-trash-alt"></i>
+                        </button>
                       </td>
                     </tr>
                     <?php endforeach; ?>
@@ -229,8 +251,51 @@
 
 </div><!-- /.wrapper -->
 
+<!-- Modal Confirmar Eliminación -->
+<div class="modal fade" id="modal-eliminar" tabindex="-1" role="dialog" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered" role="document">
+    <div class="modal-content">
+      <div class="modal-header bg-danger">
+        <h5 class="modal-title text-white">
+          <i class="fas fa-exclamation-triangle mr-2"></i>Confirmar Eliminación
+        </h5>
+        <button type="button" class="close text-white" data-dismiss="modal">
+          <span aria-hidden="true">&times;</span>
+        </button>
+      </div>
+      <div class="modal-body">
+        <p>¿Estás seguro de eliminar el pago <strong id="folio-a-eliminar"></strong>?</p>
+        <p class="text-danger mb-0"><i class="fas fa-exclamation-circle mr-1"></i>Esta acción no se puede deshacer.</p>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-default" data-dismiss="modal">
+          <i class="fas fa-times mr-1"></i> Cancelar
+        </button>
+        <form id="form-eliminar" method="post" style="display:inline">
+          <?= csrf_field() ?>
+          <button type="submit" class="btn btn-danger">
+            <i class="fas fa-trash-alt mr-1"></i> Sí, eliminar
+          </button>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.6.0/jquery.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@4.6.1/dist/js/bootstrap.bundle.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/admin-lte@3.2/dist/js/adminlte.min.js"></script>
+<script>
+const BASE_URL = '<?= base_url() ?>';
+$(function () {
+  $(document).on('click', '.btn-eliminar', function () {
+    const id    = $(this).data('id');
+    const folio = $(this).data('folio');
+    $('#folio-a-eliminar').text(folio);
+    $('#form-eliminar').attr('action', BASE_URL + 'admin/pagos/' + id + '/eliminar');
+    $('#modal-eliminar').modal('show');
+  });
+});
+</script>
 </body>
 </html>

@@ -2,6 +2,7 @@
 
 namespace App\Controllers;
 
+use App\Models\ConceptoTramiteModel;
 use App\Models\PagoModel;
 use Dompdf\Dompdf;
 use Dompdf\Options;
@@ -15,6 +16,18 @@ class PagosController extends BaseController
         }
 
         return view('pagos/registro');
+    }
+
+    public function tramitesDisponibles()
+    {
+        if (! service('session')->get('logged_in')) {
+            return $this->response->setStatusCode(401)->setJSON([]);
+        }
+
+        $nivel  = $this->request->getGet('nivel') ?? '';
+        $model  = new ConceptoTramiteModel();
+
+        return $this->response->setJSON($model->activosPorNivel($nivel));
     }
 
     public function buscarAlumno()
@@ -81,6 +94,7 @@ class PagosController extends BaseController
             'carrera'         => $this->request->getPost('carrera') ?: null,
             'concepto'        => $this->request->getPost('concepto'),
             'detalle_tramite' => $this->request->getPost('detalle_tramite') ?: null,
+            'periodo_pago'    => $this->request->getPost('periodo_pago') ?: null,
             'monto'           => $this->request->getPost('monto'),
             'id_cajero'       => service('session')->get('id_usuario'),
         ];
@@ -98,9 +112,14 @@ class PagosController extends BaseController
         }
 
         $insertId     = $model->getInsertID();
+        $inserted     = $model->find($insertId);
         $folioDigital = date('Ymd') . '-' . $insertId . '-' . strtoupper(substr(bin2hex(random_bytes(3)), 0, 6));
+        $selloDigital = hash('sha256', $folioDigital . $inserted['created_at'] . 'LLAVE_SECRETA');
 
-        $model->update($insertId, ['folio_digital' => $folioDigital]);
+        $model->update($insertId, [
+            'folio_digital' => $folioDigital,
+            'sello_digital' => $selloDigital,
+        ]);
 
         if ($this->request->isAJAX()) {
             return $this->response->setJSON([
@@ -174,6 +193,7 @@ class PagosController extends BaseController
             'montoLetras'   => $this->numeroALetras((float) $pago['monto']),
             'nombreCajero'  => $cajero['nombre'] ?? 'N/D',
             'logoBase64'    => $logoBase64,
+            'selloDigital'  => $pago['sello_digital'] ?? '',
         ];
 
         $options = new Options();
