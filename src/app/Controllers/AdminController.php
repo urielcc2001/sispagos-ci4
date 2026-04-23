@@ -42,7 +42,7 @@ class AdminController extends BaseController
         }
 
         $builder = $db->table('pagos p')
-            ->select('p.id, p.folio_digital, p.nombre_alumno, p.concepto, p.detalle_tramite, p.nivel, p.periodo_pago, p.monto, p.created_at, u.nombre AS nombre_cajero')
+            ->select('p.id, p.folio_digital, p.num_control, p.nombre_alumno, p.concepto, p.detalle_tramite, p.nivel, p.periodo_pago, p.monto, p.created_at, u.nombre AS nombre_cajero')
             ->join('usuarios u', 'u.id = p.id_cajero', 'left');
 
         if ($fechaInicio) $builder->where('DATE(p.created_at) >=', $fechaInicio);
@@ -135,7 +135,7 @@ class AdminController extends BaseController
 
         $dompdf = new Dompdf($options);
         $dompdf->loadHtml(view('admin/reporte_pdf', $data));
-        $dompdf->setPaper('letter', 'landscape');
+        $dompdf->setPaper('letter', 'portrait');
         $dompdf->render();
 
         $filename = 'reporte-pagos-' . date('Ymd-His') . '.pdf';
