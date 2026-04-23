@@ -21,14 +21,14 @@ body {
 /* ── Cada mitad de hoja ─────────────────────── */
 .seccion {
     width: 100%;
-    padding: 0.28in 0.35in 0.18in 0.35in;
+    padding: 0.18in 0.30in 0.10in 0.30in;
 }
 
 /* ── Separador central ──────────────────────── */
 .separador {
     border-top: 2px dashed #777;
-    margin: 0 0.35in;
-    padding: 3pt 0;
+    margin: 0 0.30in;
+    padding: 2pt 0;
     text-align: center;
     font-size: 7pt;
     color: #888;
@@ -40,23 +40,23 @@ body {
     width: 100%;
     border-collapse: collapse;
     border-bottom: 2.5pt solid #003087;
-    padding-bottom: 5pt;
-    margin-bottom: 8pt;
+    padding-bottom: 3pt;
+    margin-bottom: 5pt;
 }
 .enc-logo-td {
     text-align: center;
-    padding-bottom: 5pt;
+    padding-bottom: 3pt;
 }
 .enc-titulo-td {
     vertical-align: middle;
-    padding-top: 4pt;
+    padding-top: 2pt;
 }
 .enc-copia-td {
-    width: 150pt; 
+    width: 150pt;
     vertical-align: middle;
     text-align: right;
-    padding-top: 4pt;
-    padding-right: 21pt; 
+    padding-top: 2pt;
+    padding-right: 21pt;
 }
 .logo-placeholder {
     width: 90%;
@@ -78,7 +78,7 @@ body {
 .subtitulo-doc {
     font-size: 9pt;
     color: #555;
-    margin-top: 2pt;
+    margin-top: 1pt;
 }
 .copia-badge {
     display: inline-block;
@@ -95,14 +95,14 @@ body {
 .datos-table {
     width: 100%;
     border-collapse: collapse;
-    margin-top: 6pt;
+    margin-top: 4pt;
 }
 .datos-table td {
-    padding: 4pt 7pt;
+    padding: 3pt 6pt;
     vertical-align: top;
     border: 0.5pt solid #cdd5e0;
     font-size: 9pt;
-    line-height: 1.3;
+    line-height: 1.2;
 }
 .datos-table td.lbl {
     background: #eef2f9;
@@ -119,12 +119,12 @@ body {
 .monto-table {
     width: 100%;
     border-collapse: collapse;
-    margin-top: 8pt;
+    margin-top: 2pt;
     border: 1.5pt solid #003087;
     background: #eef2f9;
 }
 .monto-table td {
-    padding: 5pt 10pt;
+    padding: 2pt 8pt;
     vertical-align: middle;
 }
 .monto-num {
@@ -135,37 +135,54 @@ body {
 .monto-letras {
     font-size: 8.5pt;
     color: #444;
-    margin-top: 2pt;
+    margin-top: 1pt;
 }
 
 /* ── Firma / pie ────────────────────────────── */
 .pie-table {
     width: 100%;
     border-collapse: collapse;
-    margin-top: 10pt;
+    margin-top: 3pt;
 }
 .pie-table td {
     font-size: 7.5pt;
     color: #888;
     vertical-align: bottom;
+    padding-bottom: 0;
 }
 .firma-linea {
     border-top: 0.75pt solid #aaa;
-    width: 130pt;
-    margin-top: 22pt;
+    width: 120pt;
+    margin-top: 18pt;
     margin-bottom: 2pt;
+}
+
+/* ── QR de verificación ─────────────────────── */
+.qr-cell {
+    width: 75pt;
+    text-align: left;
+    vertical-align: middle;
+    padding: 4pt 0 0 0;
+}
+.qr-label {
+    font-size: 5.5pt;
+    color: #888;
+    margin-top: 2pt;
+    text-align: center;
+    line-height: 1.2;
+    letter-spacing: 0.3pt;
 }
 
 /* ── Sello digital ──────────────────────────── */
 .sello-digital {
-    margin-top: 7pt;
-    padding-top: 5pt;
+    margin-top: 4pt;
+    padding-top: 3pt;
     border-top: 0.5pt solid #ddd;
     font-size: 6pt;
     color: #bbb;
     word-wrap: break-word;
     word-break: break-all;
-    line-height: 1.5;
+    line-height: 1.4;
 }
 </style>
 </head>
@@ -183,17 +200,15 @@ foreach ($copias as $copia):
 
   <!-- Encabezado -->
   <table class="enc-table">
-    <!-- Fila 1: Logo institucional a todo el ancho -->
     <tr>
       <td class="enc-logo-td" colspan="2">
         <?php if (! empty($logoBase64)): ?>
-          <img src="<?= $logoBase64 ?>" style="width:90%; height:auto; max-height:80pt; display:block; margin:0 auto;">
+          <img src="<?= $logoBase64 ?>" style="width:90%; height:auto; max-height:76pt; display:block; margin:0 auto;">
         <?php else: ?>
           <div class="logo-placeholder"><?= esc(strtoupper($nivelLabel)) ?></div>
         <?php endif; ?>
       </td>
     </tr>
-    <!-- Fila 2: Título del documento + etiqueta de copia -->
     <tr>
       <td class="enc-titulo-td">
         <div class="titulo-doc">COMPROBANTE DE PAGO</div>
@@ -232,12 +247,10 @@ foreach ($copias as $copia):
     <tr>
       <td class="lbl">Periodo</td>
       <td class="val" style="font-weight:bold;">
-        <?= !empty($pago['periodo_pago']) ? esc($pago['periodo_pago']) : '—' ?>
+        <?= esc($periodoDisplay) ?>
       </td>
       <td class="lbl">Cajero</td>
-      <td class="val">
-        <?= esc($nombreCajero) ?>
-      </td>
+      <td class="val"><?= esc($nombreCajero) ?></td>
     </tr>
   </table>
 
@@ -251,19 +264,21 @@ foreach ($copias as $copia):
     </tr>
   </table>
 
-  <!-- Pie: firma + nota -->
+  <!-- Pie: firma + QR -->
+  <?php $urlValidacion = base_url('validar-pago/' . $pago['sello_digital']); ?>
   <table class="pie-table">
     <tr>
-      <td style="width:50%; text-align:left;">
+      <td style="vertical-align:bottom; text-align:left;">
         <div class="firma-linea"></div>
         Firma y Sello
       </td>
-      <td style="text-align:right; color:#aaa; padding-right: 29pt;">
-        Generado el <?= date('d/m/Y H:i') ?><br>
-        Folio: <?= esc($pago['folio_digital']) ?>
-      </td>
     </tr>
   </table>
+  <div style="text-align:center; margin-top:-2pt;">
+    <img src="https://api.qrserver.com/v1/create-qr-code/?size=100x100&data=<?= urlencode($urlValidacion) ?>"
+         style="width:60pt; height:60pt; display:block; margin:0 auto; border:0.5pt solid #ccc; padding:1pt;">
+    <div class="qr-label">VERIFICAR AUTENTICIDAD</div>
+  </div>
 
   <!-- Sello Digital de Seguridad -->
   <div class="sello-digital">

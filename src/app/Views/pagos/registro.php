@@ -65,6 +65,12 @@
               <p>Reportes</p>
             </a>
           </li>
+          <li class="nav-item">
+            <a href="<?= base_url('admin/conceptos') ?>" class="nav-link">
+              <i class="nav-icon fas fa-cogs"></i>
+              <p>Conceptos</p>
+            </a>
+          </li>
           <?php endif; ?>
         </ul>
       </nav>
@@ -221,16 +227,6 @@
                   </div>
                 </div>
 
-                <!-- Visible según nivel + concepto (mensualidad → mes; inscripción/reinscripción → periodo semestral/cuatrimestral) -->
-                <div class="col-md-3" id="grupo-periodo" style="display:none">
-                  <div class="form-group">
-                    <label for="periodo_pago" id="label-periodo">Periodo <span class="text-danger">*</span></label>
-                    <select name="periodo_pago" id="periodo_pago" class="form-control">
-                      <option value="">— Selecciona —</option>
-                    </select>
-                  </div>
-                </div>
-
                 <div class="col-md-2">
                   <div class="form-group">
                     <label for="monto">Monto <span class="text-danger">*</span></label>
@@ -246,6 +242,60 @@
                 </div>
 
               </div>
+
+              <!-- ── Periodo de pago (dinámico por concepto) ──────────────── -->
+              <div id="grupo-dinamico" class="mt-3" style="display:none">
+
+                <div class="row align-items-end">
+
+                  <!-- Fecha real de pago (solo mensualidad) -->
+                  <div class="col-md-3" id="grupo-fecha-pago" style="display:none">
+                    <div class="form-group">
+                      <label>Fecha de Pago <span class="text-danger">*</span></label>
+                      <input type="date" name="fecha_pago_real" id="fecha_pago_real" class="form-control">
+                      <small class="text-muted">Para cálculo de recargos</small>
+                    </div>
+                  </div>
+
+                  <!-- Normal / Inter (inscripción y reinscripción) -->
+                  <div class="col-md-auto" id="grupo-tipo-periodo" style="display:none">
+                    <div class="form-group">
+                      <label class="d-block">Tipo de Periodo <span class="text-danger">*</span></label>
+                      <div class="btn-group btn-group-sm" role="group">
+                        <button type="button" class="btn btn-outline-primary btn-tipo-periodo" data-val="Normal">Normal</button>
+                        <button type="button" class="btn btn-outline-primary btn-tipo-periodo" data-val="Inter">Inter</button>
+                      </div>
+                    </div>
+                  </div>
+
+                  <!-- Semestre / Cuatrimestre (solo bachillerato + reinscripción) -->
+                  <div class="col-md-auto" id="grupo-bach-tipo" style="display:none">
+                    <div class="form-group">
+                      <label class="d-block">Modalidad de Periodo</label>
+                      <div class="btn-group btn-group-sm" role="group">
+                        <button type="button" class="btn btn-outline-secondary btn-bach-tipo active" data-val="Semestre">Semestre</button>
+                        <button type="button" class="btn btn-outline-secondary btn-bach-tipo" data-val="Cuatrimestre">Cuatrimestre</button>
+                      </div>
+                    </div>
+                  </div>
+
+                </div>
+
+                <!-- Grid de números de periodo -->
+                <div class="row mt-2" id="grupo-selector-periodo" style="display:none">
+                  <div class="col-12">
+                    <label id="label-selector-periodo" class="font-weight-bold text-muted mb-2 d-block">
+                      Periodo <span class="text-danger">*</span>
+                    </label>
+                    <div id="btn-periodo-grid"></div>
+                  </div>
+                </div>
+
+              </div><!-- /grupo-dinamico -->
+
+              <input type="hidden" name="periodo_pago" id="periodo_pago_val">
+              <input type="hidden" name="tipo_periodo" id="tipo_periodo_val">
+
             </div><!-- /.card-body -->
 
             <div class="card-footer">
@@ -371,9 +421,10 @@ $(function () {
       .done(function (res) {
         if (res.found) {
           $('#nombre_alumno').val(res.nombre).addClass('is-valid');
-          $('#carrera').val(res.carrera  ?? '');
+          $('#carrera').val(res.carrera   ?? '');
           $('#txt-modalidad').val(res.modalidad ?? '');
           $('#modalidad_val').val(res.modalidad ?? '');
+          sugerirPeriodo();
         } else {
           $('#nombre_alumno').addClass('is-invalid');
           $('#msg-error-alumno').show();
@@ -411,9 +462,12 @@ $(function () {
   $('#form-pago').on('reset', function () {
     setTimeout(function () {
       resetAlumnoFields();
-      $('#grupo-modalidad-sel, #grupo-carrera, #grupo-modalidad-txt, #grupo-tramite, #grupo-periodo').hide();
+      $('#grupo-modalidad-sel, #grupo-carrera, #grupo-modalidad-txt, #grupo-tramite').hide();
+      $('#grupo-dinamico, #grupo-fecha-pago, #grupo-tipo-periodo, #grupo-bach-tipo, #grupo-selector-periodo').hide();
       $('#nombre_alumno').prop('readonly', true).removeClass('is-valid is-invalid');
-      $('#periodo_pago').val('').prop('required', false);
+      $('#periodo_pago_val, #tipo_periodo_val').val('');
+      $('#btn-periodo-grid').empty();
+      $('.btn-tipo-periodo').removeClass('btn-primary active').addClass('btn-outline-primary');
     }, 10);
   });
 
@@ -421,25 +475,41 @@ $(function () {
   $('#form-pago').on('submit', function (e) {
     e.preventDefault();
 
-    const nombre  = $('#nombre_alumno').val().trim();
-    const nivel   = $('#nivel option:selected').text().trim();
+    const conceptoVal = $('#concepto').val();
+
+    if (conceptoVal && conceptoVal !== 'tramite') {
+      if (!$('#periodo_pago_val').val()) {
+        Swal.fire({ icon: 'warning', title: 'Falta el periodo', text: 'Selecciona el número de periodo o mes.' });
+        return;
+      }
+      if ((conceptoVal === 'inscripcion' || conceptoVal === 'reinscripcion') && !$('#tipo_periodo_val').val()) {
+        Swal.fire({ icon: 'warning', title: 'Falta el tipo de periodo', text: 'Selecciona Normal o Inter.' });
+        return;
+      }
+      if (conceptoVal === 'mensualidad' && !$('#fecha_pago_real').val()) {
+        Swal.fire({ icon: 'warning', title: 'Falta la fecha', text: 'Selecciona la fecha de pago.' });
+        return;
+      }
+    }
+
+    const nombre   = $('#nombre_alumno').val().trim();
+    const nivel    = $('#nivel option:selected').text().trim();
     const concepto = $('#concepto option:selected').text().trim();
     const tramite  = $('#detalle_tramite option:selected').text().trim();
-    const periodo  = $('#periodo_pago option:selected').text().trim();
     const montoRaw = parseFloat($('#monto').val()) || 0;
     const monto    = montoRaw.toLocaleString('es-MX', { style: 'currency', currency: 'MXN' });
 
     let conceptoDisplay = concepto;
-    if ($('#concepto').val() === 'tramite' && tramite) {
+    if (conceptoVal === 'tramite' && tramite) {
       conceptoDisplay = tramite;
     }
 
-    const tienePeriodo = $('#grupo-periodo').is(':visible') && periodo && periodo !== '— Selecciona —';
-    $('#modal-nombre').text(nombre   || '—');
-    $('#modal-nivel').text(nivel     || '—');
+    const periodoDisplay = construirPeriodoDisplay();
+    $('#modal-nombre').text(nombre || '—');
+    $('#modal-nivel').text(nivel   || '—');
     $('#modal-concepto').text(conceptoDisplay || '—');
-    $('#fila-modal-periodo').toggle(tienePeriodo);
-    $('#modal-periodo').text(tienePeriodo ? periodo : '');
+    $('#fila-modal-periodo').toggle(!!periodoDisplay);
+    $('#modal-periodo').text(periodoDisplay);
     $('#modal-monto').text(monto);
 
     $('#modal-confirmar').modal('show');
@@ -514,51 +584,174 @@ $(function () {
       .always(function () { $msg.hide(); });
   }
 
+  // ── Constantes ──────────────────────────────────────────────────
+  const MESES = ['Enero','Febrero','Marzo','Abril','Mayo','Junio',
+                 'Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
+
   // ── Periodo de pago ─────────────────────────────────────────────
   function actualizarPeriodo() {
     const nivel    = $('#nivel').val();
     const concepto = $('#concepto').val();
-    const $grupo   = $('#grupo-periodo');
-    const $select  = $('#periodo_pago');
 
-    if (!nivel || !concepto || concepto === 'tramite' || nivel === 'posgrado') {
-      $grupo.hide();
-      $select.val('').prop('required', false);
-      return;
-    }
+    $('#grupo-dinamico').hide();
+    $('#grupo-fecha-pago, #grupo-tipo-periodo, #grupo-bach-tipo, #grupo-selector-periodo').hide();
+    $('#periodo_pago_val, #tipo_periodo_val').val('');
+    $('#btn-periodo-grid').empty();
+    $('.btn-tipo-periodo').removeClass('btn-primary active').addClass('btn-outline-primary');
 
-    $select.find('option:not(:first)').remove();
+    if (!nivel || !concepto || concepto === 'tramite') return;
 
-    const anio = new Date().getFullYear();
+    $('#grupo-dinamico').show();
 
     if (concepto === 'mensualidad') {
-      $('#label-periodo').text('Mes a pagar *');
-      ['Enero','Febrero','Marzo','Abril','Mayo','Junio',
-       'Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre']
-        .forEach(function (m) {
-          const v = m + ' ' + anio;
-          $select.append('<option value="' + v + '">' + v + '</option>');
-        });
-    } else {
-      $('#label-periodo').text('Periodo *');
-      if (nivel === 'prepa') {
-        ['Agosto - Diciembre', 'Enero - Julio']
-          .forEach(function (p) {
-            const v = p + ' ' + anio;
-            $select.append('<option value="' + v + '">' + v + '</option>');
-          });
-      } else {
-        ['Enero - Abril', 'Mayo - Agosto', 'Septiembre - Diciembre']
-          .forEach(function (p) {
-            const v = p + ' ' + anio;
-            $select.append('<option value="' + v + '">' + v + '</option>');
-          });
-      }
-    }
+      const hoy = new Date().toISOString().split('T')[0];
+      $('#fecha_pago_real').val(hoy);
+      $('#periodo_pago_val').val(new Date().getMonth() + 1);
+      $('#grupo-fecha-pago').show();
+      sugerirPeriodo();
 
-    $grupo.show();
-    $select.prop('required', true);
+    } else if (concepto === 'inscripcion') {
+      $('#grupo-tipo-periodo').show();
+
+      if (nivel === 'prepa') {
+        $('.btn-bach-tipo').first().addClass('active');
+        $('#grupo-bach-tipo').show();
+        $('#modalidad_val').val('Semestre');
+        $('#label-selector-periodo').html('Semestre <span class="text-danger">*</span>');
+      } else {
+        $('#label-selector-periodo').html('Periodo <span class="text-danger">*</span>');
+      }
+
+      generarBotonesGrid(1, 1, 'num');
+      $('#grupo-selector-periodo').show();
+
+    } else if (concepto === 'reinscripcion') {
+      $('#grupo-tipo-periodo').show();
+
+      if (nivel === 'prepa') {
+        $('.btn-bach-tipo').first().addClass('active');
+        $('#grupo-bach-tipo').show();
+        $('#modalidad_val').val('Semestre');
+        $('#label-selector-periodo').html('Semestre <span class="text-danger">*</span>');
+        generarBotonesGrid(2, 6, 'num');
+      } else {
+        $('#label-selector-periodo').html('Periodo <span class="text-danger">*</span>');
+        generarBotonesGrid(2, 10, 'num');
+      }
+      $('#grupo-selector-periodo').show();
+      sugerirPeriodo();
+    }
   }
+
+  function generarBotonesGrid(desde, hasta, tipo) {
+    const $grid    = $('#btn-periodo-grid');
+    const bloquear = (desde === hasta);
+    $grid.empty();
+
+    for (let i = desde; i <= hasta; i++) {
+      const label = (tipo === 'mes') ? MESES[i - 1].substring(0, 3) : i;
+      const $btn  = $('<button type="button">')
+        .addClass('btn btn-sm btn-outline-primary btn-num-periodo mr-1 mb-1')
+        .css('min-width', '52px')
+        .text(label)
+        .attr('data-val', i);
+
+      if (bloquear) {
+        $btn.removeClass('btn-outline-primary').addClass('btn-primary active').prop('disabled', true);
+        $('#periodo_pago_val').val(i);
+      }
+      $grid.append($btn);
+    }
+  }
+
+  function construirPeriodoDisplay() {
+    const concepto   = $('#concepto').val();
+    const periodoNum = $('#periodo_pago_val').val();
+    const tipo       = $('#tipo_periodo_val').val();
+    if (!periodoNum) return '';
+    if (concepto === 'mensualidad') {
+      return MESES[parseInt(periodoNum) - 1] + ' ' + new Date().getFullYear();
+    }
+    let txt = 'Periodo ' + periodoNum;
+    if (tipo) txt += ' — ' + tipo;
+    return txt;
+  }
+
+  // ── Fecha pago real → extrae mes automáticamente ────────────────
+  $(document).on('change', '#fecha_pago_real', function () {
+    const val = $(this).val();
+    if (val) {
+      $('#periodo_pago_val').val(parseInt(val.split('-')[1], 10));
+    }
+  });
+
+  // ── Precarga: sugiere el siguiente periodo ───────────────────────
+  function sugerirPeriodo() {
+    const numControl = $('#num_control').val().trim();
+    const concepto   = $('#concepto').val();
+
+    if (!numControl || !concepto || concepto === 'inscripcion' || concepto === 'tramite') return;
+
+    $.get(BASE_URL + 'pagos/ultimo-pago', { num_control: numControl, concepto: concepto })
+      .done(function (res) {
+        if (!res.found) return;
+
+        if (concepto === 'mensualidad') {
+          const mes   = String(res.sugerido).padStart(2, '0');
+          const fecha = res.anio + '-' + mes + '-01';
+          $('#fecha_pago_real').val(fecha).trigger('change');
+          mostrarBadgeSugerido(MESES[res.sugerido - 1] + ' ' + res.anio);
+
+        } else if (concepto === 'reinscripcion') {
+          // Periodo
+          const $btn = $('#btn-periodo-grid .btn-num-periodo[data-val="' + res.sugerido + '"]');
+          if ($btn.length) {
+            $btn.trigger('click');
+            mostrarBadgeSugerido('Periodo ' + res.sugerido);
+          }
+
+          // Tipo Normal / Inter
+          if (res.tipo_periodo) {
+            $('.btn-tipo-periodo[data-val="' + res.tipo_periodo + '"]').trigger('click');
+          }
+
+          // Semestre / Cuatrimestre (solo prepa, guardado en modalidad)
+          if (res.modalidad && $('#nivel').val() === 'prepa') {
+            $('.btn-bach-tipo[data-val="' + res.modalidad + '"]').trigger('click');
+          }
+        }
+      });
+  }
+
+  function mostrarBadgeSugerido(texto) {
+    $('#badge-sugerido').remove();
+    const $badge = $('<span id="badge-sugerido" class="badge badge-info ml-2">')
+      .html('<i class="fas fa-magic mr-1"></i>Sugerido: ' + texto);
+    $('#label-selector-periodo, #grupo-fecha-pago label').first().after($badge);
+    setTimeout(function () { $badge.fadeOut(400, function () { $(this).remove(); }); }, 4000);
+  }
+
+  // ── Handlers botones dinámicos ──────────────────────────────────
+  $(document).on('click', '.btn-num-periodo:not(:disabled)', function () {
+    $('.btn-num-periodo').removeClass('btn-primary active').addClass('btn-outline-primary');
+    $(this).removeClass('btn-outline-primary').addClass('btn-primary active');
+    $('#periodo_pago_val').val($(this).data('val'));
+  });
+
+  $(document).on('click', '.btn-tipo-periodo', function () {
+    $('.btn-tipo-periodo').removeClass('btn-primary active').addClass('btn-outline-primary');
+    $(this).removeClass('btn-outline-primary').addClass('btn-primary active');
+    $('#tipo_periodo_val').val($(this).data('val'));
+  });
+
+  $(document).on('click', '.btn-bach-tipo', function () {
+    $('.btn-bach-tipo').removeClass('btn-primary active').addClass('btn-outline-secondary');
+    $(this).removeClass('btn-outline-secondary').addClass('btn-primary active');
+    $('#label-selector-periodo').html($(this).data('val') + ' <span class="text-danger">*</span>');
+    if ($('#nivel').val() === 'prepa') {
+      $('#modalidad_val').val($(this).data('val'));
+    }
+  });
 
   // ── Helpers ─────────────────────────────────────────────────────
   function resetAlumnoFields() {

@@ -80,10 +80,84 @@ class PagosController extends BaseController
         return $this->response->setJSON(['found' => false]);
     }
 
+    public function ultimoPago()
+    {
+        if (! service('session')->get('logged_in')) {
+            return $this->response->setStatusCode(401)->setJSON([]);
+        }
+
+        $numControl = trim($this->request->getGet('num_control') ?? '');
+        $concepto   = $this->request->getGet('concepto') ?? '';
+
+        if (empty($numControl) || empty($concepto)) {
+            return $this->response->setJSON(['found' => false]);
+        }
+
+        $model  = new PagoModel();
+        $ultimo = $model
+            ->where('num_control', $numControl)
+            ->where('concepto', $concepto)
+            ->orderBy('id', 'DESC')
+            ->first();
+
+        // Sin reinscripción previa → buscar inscripción para sugerir periodo 2
+        if ((! $ultimo || empty($ultimo['periodo_pago'])) && $concepto === 'reinscripcion') {
+            $inscripcion = $model
+                ->where('num_control', $numControl)
+                ->where('concepto', 'inscripcion')
+                ->orderBy('id', 'DESC')
+                ->first();
+
+            if (! $inscripcion) {
+                return $this->response->setJSON(['found' => false]);
+            }
+
+            return $this->response->setJSON([
+                'found'        => true,
+                'actual'       => 1,
+                'sugerido'     => 2,
+                'anio'         => (int) date('Y'),
+                'tipo_periodo' => $inscripcion['tipo_periodo'] ?? null,
+                'modalidad'    => $inscripcion['modalidad']    ?? null,
+            ]);
+        }
+
+        if (! $ultimo || empty($ultimo['periodo_pago'])) {
+            return $this->response->setJSON(['found' => false]);
+        }
+
+        $actual   = (int) $ultimo['periodo_pago'];
+        $sugerido = $actual + 1;
+        $anio     = (int) date('Y');
+
+        if ($concepto === 'mensualidad' && $sugerido > 12) {
+            $sugerido = 1;
+            $anio++;
+        }
+
+        return $this->response->setJSON([
+            'found'        => true,
+            'actual'       => $actual,
+            'sugerido'     => $sugerido,
+            'anio'         => $anio,
+            'tipo_periodo' => $ultimo['tipo_periodo'] ?? null,
+            'modalidad'    => $ultimo['modalidad']    ?? null,
+        ]);
+    }
+
     public function registrar()
     {
         if (! service('session')->get('logged_in')) {
             return redirect()->to(base_url('auth/login'));
+        }
+
+        $concepto      = $this->request->getPost('concepto');
+        $periodoNum    = $this->request->getPost('periodo_pago')    ?: null;
+        $tipoPeriodo   = $this->request->getPost('tipo_periodo')    ?: null;
+        $fechaPagoReal = $this->request->getPost('fecha_pago_real') ?: null;
+
+        if ($concepto !== 'mensualidad') {
+            $fechaPagoReal = null;
         }
 
         $data = [
@@ -92,9 +166,11 @@ class PagosController extends BaseController
             'nombre_alumno'   => $this->request->getPost('nombre_alumno'),
             'modalidad'       => $this->request->getPost('modalidad') ?: null,
             'carrera'         => $this->request->getPost('carrera') ?: null,
-            'concepto'        => $this->request->getPost('concepto'),
+            'concepto'        => $concepto,
             'detalle_tramite' => $this->request->getPost('detalle_tramite') ?: null,
-            'periodo_pago'    => $this->request->getPost('periodo_pago') ?: null,
+            'periodo_pago'    => $periodoNum !== null ? (int) $periodoNum : null,
+            'tipo_periodo'    => $tipoPeriodo,
+            'fecha_pago_real' => $fechaPagoReal,
             'monto'           => $this->request->getPost('monto'),
             'id_cajero'       => service('session')->get('id_usuario'),
         ];
@@ -172,6 +248,23 @@ class PagosController extends BaseController
             $conceptoLabel .= ' — ' . ($detalles[$pago['detalle_tramite']] ?? $pago['detalle_tramite']);
         }
 
+        $mesesNombres  = ['Enero','Febrero','Marzo','Abril','Mayo','Junio',
+                          'Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
+        $periodoDisplay = '—';
+        if (! empty($pago['periodo_pago'])) {
+            $num = (int) $pago['periodo_pago'];
+            if ($pago['concepto'] === 'mensualidad') {
+                $mesNombre      = $mesesNombres[$num - 1] ?? '?';
+                $anio           = date('Y', strtotime($pago['created_at']));
+                $periodoDisplay = $mesNombre . ' ' . $anio;
+            } else {
+                $periodoDisplay = 'Periodo ' . $num;
+                if (! empty($pago['tipo_periodo'])) {
+                    $periodoDisplay .= ' — ' . $pago['tipo_periodo'];
+                }
+            }
+        }
+
         $logoMap = [
             'uni'      => 'logosuni.jpeg',
             'prepa'    => 'logosba.jpeg',
@@ -185,20 +278,21 @@ class PagosController extends BaseController
         }
 
         $viewData = [
-            'pago'          => $pago,
-            'nivelLabel'    => $niveles[$pago['nivel']] ?? $pago['nivel'],
-            'conceptoLabel' => $conceptoLabel,
-            'fechaHora'     => date('d/m/Y H:i:s', strtotime($pago['created_at'])),
-            'montoFormato'  => '$' . number_format((float) $pago['monto'], 2),
-            'montoLetras'   => $this->numeroALetras((float) $pago['monto']),
-            'nombreCajero'  => $cajero['nombre'] ?? 'N/D',
-            'logoBase64'    => $logoBase64,
-            'selloDigital'  => $pago['sello_digital'] ?? '',
+            'pago'           => $pago,
+            'nivelLabel'     => $niveles[$pago['nivel']] ?? $pago['nivel'],
+            'conceptoLabel'  => $conceptoLabel,
+            'periodoDisplay' => $periodoDisplay,
+            'fechaHora'      => date('d/m/Y H:i:s', strtotime($pago['created_at'])),
+            'montoFormato'   => '$' . number_format((float) $pago['monto'], 2),
+            'montoLetras'    => $this->numeroALetras((float) $pago['monto']),
+            'nombreCajero'   => $cajero['nombre'] ?? 'N/D',
+            'logoBase64'     => $logoBase64,
+            'selloDigital'   => $pago['sello_digital'] ?? '',
         ];
 
         $options = new Options();
         $options->set('defaultFont', 'Helvetica');
-        $options->set('isRemoteEnabled', false);
+        $options->set('isRemoteEnabled', true);
 
         $dompdf = new Dompdf($options);
         $dompdf->loadHtml(view('pagos/comprobante_pdf', $viewData));
