@@ -255,8 +255,9 @@ class AdminController extends BaseController
 
     public function estadoCuenta()
     {
-        if ($guard = $this->checkAdmin()) {
-            return $guard;
+        $session = service('session');
+        if (! $session->get('logged_in') || ! in_array($session->get('rol'), ['admin', 'cajero'], true)) {
+            return redirect()->to(base_url('auth/login'));
         }
 
         $numControl = trim($this->request->getGet('num_control') ?? '');

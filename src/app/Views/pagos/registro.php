@@ -86,12 +86,16 @@
               <p>Conceptos</p>
             </a>
           </li>
+          <?php endif; ?>
+          <?php if (session()->get('rol') === 'admin' || session()->get('rol') === 'cajero'): ?>
           <li class="nav-item">
             <a href="<?= base_url('admin/estado-cuenta') ?>" class="nav-link">
               <i class="nav-icon fas fa-search-dollar"></i>
               <p>Estado de Cuenta</p>
             </a>
           </li>
+          <?php endif; ?>
+          <?php if (service('session')->get('rol') === 'admin'): ?>
           <li class="nav-item">
             <a href="<?= base_url('admin/morosos') ?>" class="nav-link">
               <i class="nav-icon fas fa-user-clock"></i>
