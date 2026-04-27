@@ -12,25 +12,25 @@ body {
     font-family: Helvetica, Arial, sans-serif;
     font-size: 8pt;
     color: #1a1a1a;
-    padding: 38pt 42pt;
+    padding: 24pt 42pt 38pt;
 }
 
 /* ── Encabezado ──────────────────────────────────────────────── */
 .header-wrap {
     width: 100%;
     border-bottom: 2.5pt solid #003087;
-    padding-bottom: 7pt;
-    margin-bottom: 10pt;
+    padding-bottom: 5pt;
+    margin-bottom: 7pt;
 }
 .titulo {
-    font-size: 14pt;
+    font-size: 11pt;
     font-weight: bold;
     color: #003087;
     text-transform: uppercase;
     letter-spacing: 0.5pt;
 }
-.subtitulo { font-size: 8.5pt; color: #555; margin-top: 2pt; }
-.meta      { font-size: 7pt; color: #999; margin-top: 4pt; }
+.subtitulo { font-size: 8.5pt; color: #555; margin-top: 1pt; }
+.meta      { font-size: 7pt; color: #999; margin-top: 2pt; }
 
 /* ── Tabla ───────────────────────────────────────────────────── */
 table {

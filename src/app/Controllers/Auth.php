@@ -23,6 +23,10 @@ class Auth extends BaseController
             return view('login', ['error' => 'Usuario o contraseña incorrectos.']);
         }
 
+        if (($user['status'] ?? 1) == 0) {
+            return view('login', ['error' => 'Tu cuenta está deshabilitada. Contacta al administrador.']);
+        }
+
         $session = service('session');
         $session->set([
             'id_usuario' => $user['id'],

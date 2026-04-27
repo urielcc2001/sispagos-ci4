@@ -253,6 +253,50 @@ class AdminController extends BaseController
             ->with('success', "Pago {$pagoAntes['folio_digital']} actualizado correctamente.");
     }
 
+    public function estadoCuenta()
+    {
+        if ($guard = $this->checkAdmin()) {
+            return $guard;
+        }
+
+        $numControl = trim($this->request->getGet('num_control') ?? '');
+        $nivel      = $this->request->getGet('nivel') ?? '';
+        $anio       = (int) ($this->request->getGet('anio') ?? date('Y'));
+
+        $data = [
+            'num_control' => $numControl,
+            'nivel'       => $nivel,
+            'anio'        => $anio,
+            'estado'      => [],
+            'info_alumno' => null,
+            'anios'       => [],
+        ];
+
+        if ($numControl && $nivel) {
+            $model              = new \App\Models\AdeudoModel();
+            $data['estado']     = $model->getEstadoCuentaMensual($numControl, $nivel, $anio);
+            $data['info_alumno'] = $model->getInfoAlumno($numControl, $nivel);
+            $data['anios']      = $model->getAniosConPagos($numControl, $nivel);
+        }
+
+        return view('admin/estado_cuenta', $data);
+    }
+
+    public function morosos()
+    {
+        if ($guard = $this->checkAdmin()) {
+            return $guard;
+        }
+
+        $nivel = $this->request->getGet('nivel') ?? '';
+        $model = new \App\Models\AdeudoModel();
+
+        return view('admin/morosos', [
+            'morosos' => $model->getMorosos($nivel ?: null),
+            'nivel'   => $nivel,
+        ]);
+    }
+
     public function eliminarPago(int $id)
     {
         if ($guard = $this->checkAdmin()) {

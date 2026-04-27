@@ -21,17 +21,24 @@
       </li>
     </ul>
     <ul class="navbar-nav ml-auto">
-      <li class="nav-item">
-        <span class="nav-link text-muted">
+      <li class="nav-item dropdown">
+        <a class="nav-link dropdown-toggle" href="#" data-toggle="dropdown" aria-expanded="false">
           <i class="fas fa-user-shield mr-1"></i>
           <?= esc(service('session')->get('nombre') ?? '') ?>
           <span class="badge badge-warning ml-1">Admin</span>
-        </span>
-      </li>
-      <li class="nav-item">
-        <a href="<?= base_url('auth/login') ?>" class="nav-link text-danger">
-          <i class="fas fa-sign-out-alt"></i> Salir
         </a>
+        <div class="dropdown-menu dropdown-menu-right shadow">
+          <a class="dropdown-item" href="<?= base_url('configuracion/usuarios') ?>">
+            <i class="fas fa-users-cog mr-2 text-primary"></i> Gestión de Usuarios
+          </a>
+          <a class="dropdown-item" href="<?= base_url('configuracion/password') ?>">
+            <i class="fas fa-key mr-2 text-secondary"></i> Cambiar Contraseña
+          </a>
+          <div class="dropdown-divider"></div>
+          <a class="dropdown-item text-danger" href="<?= base_url('auth/login') ?>">
+            <i class="fas fa-sign-out-alt mr-2"></i> Salir
+          </a>
+        </div>
       </li>
     </ul>
   </nav>
@@ -66,6 +73,18 @@
             <a href="<?= base_url('admin/conceptos') ?>" class="nav-link">
               <i class="nav-icon fas fa-cogs"></i>
               <p>Conceptos</p>
+            </a>
+          </li>
+          <li class="nav-item">
+            <a href="<?= base_url('admin/estado-cuenta') ?>" class="nav-link">
+              <i class="nav-icon fas fa-search-dollar"></i>
+              <p>Estado de Cuenta</p>
+            </a>
+          </li>
+          <li class="nav-item">
+            <a href="<?= base_url('admin/morosos') ?>" class="nav-link">
+              <i class="nav-icon fas fa-user-clock"></i>
+              <p>Morosos</p>
             </a>
           </li>
         </ul>

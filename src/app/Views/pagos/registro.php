@@ -22,16 +22,31 @@
       </li>
     </ul>
     <ul class="navbar-nav ml-auto">
-      <li class="nav-item">
-        <span class="nav-link">
-          <i class="fas fa-user-circle mr-1"></i>
-          <?= esc(service('session')->get('nombre') ?? '') ?>
-        </span>
-      </li>
-      <li class="nav-item">
-        <a href="<?= base_url('auth/login') ?>" class="nav-link text-danger">
-          <i class="fas fa-sign-out-alt"></i> Salir
+      <li class="nav-item dropdown">
+        <a class="nav-link dropdown-toggle" href="#" data-toggle="dropdown" aria-expanded="false">
+          <?php if (service('session')->get('rol') === 'admin'): ?>
+            <i class="fas fa-user-shield mr-1"></i>
+            <?= esc(service('session')->get('nombre') ?? '') ?>
+            <span class="badge badge-warning ml-1">Admin</span>
+          <?php else: ?>
+            <i class="fas fa-user-circle mr-1"></i>
+            <?= esc(service('session')->get('nombre') ?? '') ?>
+          <?php endif; ?>
         </a>
+        <div class="dropdown-menu dropdown-menu-right shadow">
+          <?php if (service('session')->get('rol') === 'admin'): ?>
+          <a class="dropdown-item" href="<?= base_url('configuracion/usuarios') ?>">
+            <i class="fas fa-users-cog mr-2 text-primary"></i> Gestión de Usuarios
+          </a>
+          <?php endif; ?>
+          <a class="dropdown-item" href="<?= base_url('configuracion/password') ?>">
+            <i class="fas fa-key mr-2 text-secondary"></i> Cambiar Contraseña
+          </a>
+          <div class="dropdown-divider"></div>
+          <a class="dropdown-item text-danger" href="<?= base_url('auth/login') ?>">
+            <i class="fas fa-sign-out-alt mr-2"></i> Salir
+          </a>
+        </div>
       </li>
     </ul>
   </nav>
@@ -69,6 +84,18 @@
             <a href="<?= base_url('admin/conceptos') ?>" class="nav-link">
               <i class="nav-icon fas fa-cogs"></i>
               <p>Conceptos</p>
+            </a>
+          </li>
+          <li class="nav-item">
+            <a href="<?= base_url('admin/estado-cuenta') ?>" class="nav-link">
+              <i class="nav-icon fas fa-search-dollar"></i>
+              <p>Estado de Cuenta</p>
+            </a>
+          </li>
+          <li class="nav-item">
+            <a href="<?= base_url('admin/morosos') ?>" class="nav-link">
+              <i class="nav-icon fas fa-user-clock"></i>
+              <p>Morosos</p>
             </a>
           </li>
           <?php endif; ?>
@@ -113,6 +140,14 @@
           <form action="<?= base_url('pagos/registrar') ?>" method="post" id="form-pago">
             <?= csrf_field() ?>
 
+            <!-- Banner: adeudos de mensualidad detectados -->
+            <div id="alerta-adeudos" class="alert alert-warning mx-3 mt-3 mb-0" style="display:none">
+              <button type="button" class="close" onclick="$('#alerta-adeudos').hide()">&times;</button>
+              <i class="fas fa-exclamation-triangle mr-2"></i>
+              <strong>¡Atención!</strong> El alumno presenta mensualidades pendientes en:
+              <strong id="lista-adeudos"></strong>
+            </div>
+
             <div class="card-body">
 
               <!-- Fila 1: Nivel + Modalidad Posgrado + Núm. Control + Nombre + Carrera + Modalidad Uni -->
@@ -126,18 +161,6 @@
                       <option value="prepa">Bachillerato / Prepa</option>
                       <option value="uni">Universidad</option>
                       <option value="posgrado">Posgrado</option>
-                    </select>
-                  </div>
-                </div>
-
-                <!-- Solo visible cuando nivel = posgrado -->
-                <div class="col-md-2" id="grupo-modalidad-sel" style="display:none">
-                  <div class="form-group">
-                    <label for="sel-modalidad">Modalidad</label>
-                    <select id="sel-modalidad" class="form-control">
-                      <option value="">— Selecciona —</option>
-                      <option value="Maestría">Maestría</option>
-                      <option value="Doctorado">Doctorado</option>
                     </select>
                   </div>
                 </div>
@@ -157,6 +180,32 @@
                     <small id="msg-error-alumno" class="text-danger" style="display:none">
                       <i class="fas fa-exclamation-circle"></i> Alumno no encontrado.
                     </small>
+                  </div>
+                </div>
+
+                <!-- Solo visible cuando nivel = prepa -->
+                <div class="col-md-2" id="grupo-modalidad-prepa" style="display:none">
+                  <div class="form-group">
+                    <label for="sel-modalidad-prepa">Modalidad</label>
+                    <select id="sel-modalidad-prepa" class="form-control">
+                      <option value="">— Selecciona —</option>
+                      <option value="Escolarizado">Escolarizado</option>
+                      <option value="Sabatino">Sabatino</option>
+                      <option value="Dominical">Dominical</option>
+                      <option value="Nocturno">Nocturno</option>
+                    </select>
+                  </div>
+                </div>
+
+                <!-- Solo visible cuando nivel = posgrado -->
+                <div class="col-md-2" id="grupo-modalidad-sel" style="display:none">
+                  <div class="form-group">
+                    <label for="sel-modalidad">Modalidad</label>
+                    <select id="sel-modalidad" class="form-control">
+                      <option value="">— Selecciona —</option>
+                      <option value="Maestría">Maestría</option>
+                      <option value="Doctorado">Doctorado</option>
+                    </select>
                   </div>
                 </div>
 
@@ -218,7 +267,7 @@
                 <div class="col-md-4" id="grupo-tramite" style="display:none">
                   <div class="form-group">
                     <label for="detalle_tramite">Tipo de Trámite <span class="text-danger">*</span></label>
-                    <select name="detalle_tramite" id="detalle_tramite" class="form-control">
+                    <select id="detalle_tramite" class="form-control">
                       <option value="">— Selecciona nivel primero —</option>
                     </select>
                     <small id="msg-tramites" class="text-muted" style="display:none">
@@ -268,17 +317,31 @@
                     </div>
                   </div>
 
-                  <!-- Semestre / Cuatrimestre (solo bachillerato + reinscripción) -->
+                  <!-- Plan de estudios (solo bachillerato, inscripción/reinscripción) -->
                   <div class="col-md-auto" id="grupo-bach-tipo" style="display:none">
                     <div class="form-group">
-                      <label class="d-block">Modalidad de Periodo</label>
+                      <label class="d-block">Plan de Estudios</label>
                       <div class="btn-group btn-group-sm" role="group">
-                        <button type="button" class="btn btn-outline-secondary btn-bach-tipo active" data-val="Semestre">Semestre</button>
-                        <button type="button" class="btn btn-outline-secondary btn-bach-tipo" data-val="Cuatrimestre">Cuatrimestre</button>
+                        <button type="button" class="btn btn-outline-secondary btn-bach-tipo active" data-val="Semestral">Semestral</button>
+                        <button type="button" class="btn btn-outline-secondary btn-bach-tipo" data-val="Cuatrimestral">Cuatrimestral</button>
                       </div>
                     </div>
                   </div>
 
+                </div>
+
+                <!-- Materia a pagar (solo posgrado + mensualidad) -->
+                <div id="grupo-materia-posgrado" style="display:none">
+                  <div class="row mt-2">
+                    <div class="col-md-8">
+                      <div class="form-group mb-0">
+                        <label for="sel-materia-posgrado">Materia a Pagar <span class="text-danger">*</span></label>
+                        <select id="sel-materia-posgrado" class="form-control">
+                          <option value="">— Selecciona Maestría o Doctorado primero —</option>
+                        </select>
+                      </div>
+                    </div>
+                  </div>
                 </div>
 
                 <!-- Grid de números de periodo -->
@@ -295,6 +358,7 @@
 
               <input type="hidden" name="periodo_pago" id="periodo_pago_val">
               <input type="hidden" name="tipo_periodo" id="tipo_periodo_val">
+              <input type="hidden" name="detalle_tramite" id="detalle_tramite_val">
 
             </div><!-- /.card-body -->
 
@@ -383,26 +447,40 @@ $(function () {
     const nivel = $(this).val();
 
     resetAlumnoFields();
+    $('#alerta-adeudos').hide();
 
     const esUni      = nivel === 'uni';
     const esPosgrado = nivel === 'posgrado';
+    const esPrepa    = nivel === 'prepa';
 
     $('#nombre_alumno').prop('readonly', !esPosgrado);
 
     $('#grupo-modalidad-sel').toggle(esPosgrado);
+    $('#grupo-modalidad-prepa').toggle(esPrepa);
     $('#grupo-carrera').toggle(esUni);
     $('#grupo-modalidad-txt').toggle(esUni);
 
+    $('#concepto option[value="mensualidad"]').text(esPosgrado ? 'Materia' : 'Mensualidad');
     $('#sel-modalidad').val('');
+    $('#sel-modalidad-prepa').val('');
     $('#modalidad_val').val('');
+    $('#detalle_tramite_val').val('');
     actualizarPeriodo();
     if ($('#concepto').val() === 'tramite') {
       cargarTramites();
     }
   });
 
-  // ── Modalidad posgrado → campo oculto ──────────────────────────
+  // ── Modalidad posgrado → campo oculto + actualizar lista materias ─
   $('#sel-modalidad').on('change', function () {
+    $('#modalidad_val').val($(this).val());
+    if ($('#nivel').val() === 'posgrado' && $('#concepto').val() === 'mensualidad') {
+      actualizarListaMaterias();
+    }
+  });
+
+  // ── Modalidad prepa → campo oculto ─────────────────────────────
+  $('#sel-modalidad-prepa').on('change', function () {
     $('#modalidad_val').val($(this).val());
   });
 
@@ -411,23 +489,47 @@ $(function () {
     const numControl = $(this).val().trim();
     const nivel      = $('#nivel').val();
 
-    if (!numControl || !nivel || nivel === 'posgrado') return;
+    if (!numControl || !nivel) return;
 
     $('#spinner-buscar').show();
     $('#msg-error-alumno').hide();
-    $('#nombre_alumno').val('').removeClass('is-valid is-invalid');
+    if (nivel !== 'posgrado') {
+      $('#nombre_alumno').val('').removeClass('is-valid is-invalid');
+    }
 
     $.get(BASE_URL + 'pagos/buscar-alumno', { num_control: numControl, nivel: nivel })
       .done(function (res) {
         if (res.found) {
           $('#nombre_alumno').val(res.nombre).addClass('is-valid');
-          $('#carrera').val(res.carrera   ?? '');
-          $('#txt-modalidad').val(res.modalidad ?? '');
-          $('#modalidad_val').val(res.modalidad ?? '');
+          $('#carrera').val(res.carrera ?? '');
+          if (nivel === 'posgrado') {
+            // nombre pre-filled but still editable; grado from #sel-modalidad
+          } else if (nivel !== 'prepa') {
+            $('#txt-modalidad').val(res.modalidad ?? '');
+            $('#modalidad_val').val(res.modalidad ?? '');
+          } else {
+            $.get(BASE_URL + 'pagos/ultimo-pago', { num_control: numControl, concepto: 'reinscripcion' })
+              .done(function (u) {
+                const mod = u.found && u.modalidad ? u.modalidad : null;
+                if (mod) {
+                  $('#sel-modalidad-prepa').val(mod).trigger('change');
+                }
+              });
+          }
           sugerirPeriodo();
+          verificarAdeudos(numControl, nivel);
+        } else if (nivel === 'posgrado') {
+          $('#msg-error-alumno')
+            .removeClass('text-danger').addClass('text-info')
+            .html('<i class="fas fa-info-circle"></i> No encontrado en BD Universitaria. Capture el nombre.')
+            .show();
         } else {
+          $('#alerta-adeudos').hide();
           $('#nombre_alumno').addClass('is-invalid');
-          $('#msg-error-alumno').show();
+          $('#msg-error-alumno')
+            .removeClass('text-info').addClass('text-danger')
+            .html('<i class="fas fa-exclamation-circle"></i> Alumno no encontrado.')
+            .show();
         }
       })
       .fail(function () {
@@ -452,8 +554,9 @@ $(function () {
     actualizarPeriodo();
   });
 
-  // ── Detalle trámite → sugerir precio ───────────────────────────
+  // ── Detalle trámite → sincronizar hidden + sugerir precio ───────
   $('#detalle_tramite').on('change', function () {
+    $('#detalle_tramite_val').val($(this).val());
     const precio = $(this).find(':selected').data('precio');
     if (precio) $('#monto').val(parseFloat(precio).toFixed(2));
   });
@@ -462,10 +565,11 @@ $(function () {
   $('#form-pago').on('reset', function () {
     setTimeout(function () {
       resetAlumnoFields();
-      $('#grupo-modalidad-sel, #grupo-carrera, #grupo-modalidad-txt, #grupo-tramite').hide();
-      $('#grupo-dinamico, #grupo-fecha-pago, #grupo-tipo-periodo, #grupo-bach-tipo, #grupo-selector-periodo').hide();
+      $('#grupo-modalidad-sel, #grupo-modalidad-prepa, #grupo-carrera, #grupo-modalidad-txt, #grupo-tramite').hide();
+      $('#grupo-dinamico, #grupo-fecha-pago, #grupo-tipo-periodo, #grupo-bach-tipo, #grupo-selector-periodo, #grupo-materia-posgrado').hide();
       $('#nombre_alumno').prop('readonly', true).removeClass('is-valid is-invalid');
-      $('#periodo_pago_val, #tipo_periodo_val').val('');
+      $('#periodo_pago_val, #tipo_periodo_val, #detalle_tramite_val').val('');
+      $('#sel-modalidad-prepa, #sel-materia-posgrado').val('');
       $('#btn-periodo-grid').empty();
       $('.btn-tipo-periodo').removeClass('btn-primary active').addClass('btn-outline-primary');
     }, 10);
@@ -475,9 +579,16 @@ $(function () {
   $('#form-pago').on('submit', function (e) {
     e.preventDefault();
 
-    const conceptoVal = $('#concepto').val();
+    const conceptoVal       = $('#concepto').val();
+    const nivelVal          = $('#nivel').val();
+    const esPosgradoMateria = nivelVal === 'posgrado' && conceptoVal === 'mensualidad';
 
-    if (conceptoVal && conceptoVal !== 'tramite') {
+    if (esPosgradoMateria) {
+      if (!$('#detalle_tramite_val').val()) {
+        Swal.fire({ icon: 'warning', title: 'Falta la materia', text: 'Selecciona la materia a pagar.' });
+        return;
+      }
+    } else if (conceptoVal && conceptoVal !== 'tramite') {
       if (!$('#periodo_pago_val').val()) {
         Swal.fire({ icon: 'warning', title: 'Falta el periodo', text: 'Selecciona el número de periodo o mes.' });
         return;
@@ -502,6 +613,8 @@ $(function () {
     let conceptoDisplay = concepto;
     if (conceptoVal === 'tramite' && tramite) {
       conceptoDisplay = tramite;
+    } else if (esPosgradoMateria && $('#detalle_tramite_val').val()) {
+      conceptoDisplay += ' — ' + $('#detalle_tramite_val').val();
     }
 
     const periodoDisplay = construirPeriodoDisplay();
@@ -588,14 +701,68 @@ $(function () {
   const MESES = ['Enero','Febrero','Marzo','Abril','Mayo','Junio',
                  'Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
 
+  const MATERIAS_MAESTRIA = [
+    'PROBLEMAS POLÍTICOS Y SOCIOECONÓMICOS EN EDUCACIÓN',
+    'CORRIENTES PEDAGÓGICAS ACTUALES',
+    'PROCESOS DE ENSEÑANZA APRENDIZAJE',
+    'ADMINISTRACION EDUCATIVA',
+    'PLANEACION ESTRETEGICA',
+    'METODOLOGIA DE LA INVESTIGACION EDUCATIVA',
+    'SOFTWARE EDUCATIVO',
+    'LEGISLACION EDUCATIVA',
+    'GESTION DE PROYECTOS',
+    'PLANEACION Y DESARROLLO CURRICULAR',
+    'EVALUACION EDUCATIVA',
+    'DIRECCION DE INSTITUCIONES EDUCATIVAS',
+    'MODELOS PARA LA TOMA DE DECISIONES',
+    'ADMINISTRACIÓN DE PERSONAL',
+    'PROMOCIÓN E IMAGEN INSTITUCIONAL',
+    'MODELOS DE EVALUACIÓN INSTITUCIONAL',
+    'GESTIÓN DE LA CALIDAD EN LA EDUCACIÓN',
+    'SEMINARIO DE INVESTIGACIÓN EDUCATIVA',
+  ];
+
+  const MATERIAS_DOCTORADO = [
+    'SEMINARIO DE INVESTIGACIÓN',
+    'GESTIÓN EDUCATIVA',
+    'TALLER DE COMUNICACIÓN EDUCATIVA',
+    'INVESTIGACIÓN EDUCATIVA',
+    'TECNOLOGÍA EN LA EDUCACIÓN',
+    'SEMINARIO DE TESIS DOCTORAL I',
+    'FORMACIÓN DOCENTE',
+    'ANÁLISIS Y DISEÑO CURRICULAR',
+    'SEMINARIO DE TESIS DOCTORAL II',
+    'TEORÍA DEL APRENDIZAJE',
+    'PLANEACIÓN ESTRATÉGICA Y GESTIÓN EDUCATIVA',
+    'SEMINARIO DE TESIS DOCTORAL III',
+  ];
+
+  // ── Materia posgrado change → hidden field ──────────────────────
+  $(document).on('change', '#sel-materia-posgrado', function () {
+    $('#detalle_tramite_val').val($(this).val());
+  });
+
+  function actualizarListaMaterias() {
+    const grado = $('#sel-modalidad').val();
+    const $sel  = $('#sel-materia-posgrado');
+    $sel.empty().append('<option value="">— Selecciona materia —</option>');
+    const lista = grado === 'Maestría' ? MATERIAS_MAESTRIA :
+                  grado === 'Doctorado' ? MATERIAS_DOCTORADO : [];
+    lista.forEach(function (m) {
+      $sel.append('<option value="' + m + '">' + m + '</option>');
+    });
+    $('#detalle_tramite_val').val('');
+  }
+
   // ── Periodo de pago ─────────────────────────────────────────────
   function actualizarPeriodo() {
     const nivel    = $('#nivel').val();
     const concepto = $('#concepto').val();
 
     $('#grupo-dinamico').hide();
-    $('#grupo-fecha-pago, #grupo-tipo-periodo, #grupo-bach-tipo, #grupo-selector-periodo').hide();
-    $('#periodo_pago_val, #tipo_periodo_val').val('');
+    $('#grupo-fecha-pago, #grupo-tipo-periodo, #grupo-bach-tipo, #grupo-selector-periodo, #grupo-materia-posgrado').hide();
+    $('#periodo_pago_val, #tipo_periodo_val, #detalle_tramite_val').val('');
+    $('#sel-materia-posgrado').val('');
     $('#btn-periodo-grid').empty();
     $('.btn-tipo-periodo').removeClass('btn-primary active').addClass('btn-outline-primary');
 
@@ -604,6 +771,11 @@ $(function () {
     $('#grupo-dinamico').show();
 
     if (concepto === 'mensualidad') {
+      if (nivel === 'posgrado') {
+        actualizarListaMaterias();
+        $('#grupo-materia-posgrado').show();
+        return;
+      }
       const hoy = new Date().toISOString().split('T')[0];
       $('#fecha_pago_real').val(hoy);
       $('#periodo_pago_val').val(new Date().getMonth() + 1);
@@ -616,8 +788,8 @@ $(function () {
       if (nivel === 'prepa') {
         $('.btn-bach-tipo').first().addClass('active');
         $('#grupo-bach-tipo').show();
-        $('#modalidad_val').val('Semestre');
-        $('#label-selector-periodo').html('Semestre <span class="text-danger">*</span>');
+        $('#detalle_tramite_val').val('Semestral');
+        $('#label-selector-periodo').html('Semestral <span class="text-danger">*</span>');
       } else {
         $('#label-selector-periodo').html('Periodo <span class="text-danger">*</span>');
       }
@@ -631,8 +803,8 @@ $(function () {
       if (nivel === 'prepa') {
         $('.btn-bach-tipo').first().addClass('active');
         $('#grupo-bach-tipo').show();
-        $('#modalidad_val').val('Semestre');
-        $('#label-selector-periodo').html('Semestre <span class="text-danger">*</span>');
+        $('#detalle_tramite_val').val('Semestral');
+        $('#label-selector-periodo').html('Semestral <span class="text-danger">*</span>');
         generarBotonesGrid(2, 6, 'num');
       } else {
         $('#label-selector-periodo').html('Periodo <span class="text-danger">*</span>');
@@ -666,8 +838,10 @@ $(function () {
 
   function construirPeriodoDisplay() {
     const concepto   = $('#concepto').val();
+    const nivelVal   = $('#nivel').val();
     const periodoNum = $('#periodo_pago_val').val();
     const tipo       = $('#tipo_periodo_val').val();
+    if (nivelVal === 'posgrado' && concepto === 'mensualidad') return '';
     if (!periodoNum) return '';
     if (concepto === 'mensualidad') {
       return MESES[parseInt(periodoNum) - 1] + ' ' + new Date().getFullYear();
@@ -715,9 +889,13 @@ $(function () {
             $('.btn-tipo-periodo[data-val="' + res.tipo_periodo + '"]').trigger('click');
           }
 
-          // Semestre / Cuatrimestre (solo prepa, guardado en modalidad)
+          // Plan de estudios (solo prepa, guardado en detalle_tramite)
+          if (res.plan_bach && $('#nivel').val() === 'prepa') {
+            $('.btn-bach-tipo[data-val="' + res.plan_bach + '"]').trigger('click');
+          }
+          // Modalidad de horario (solo prepa)
           if (res.modalidad && $('#nivel').val() === 'prepa') {
-            $('.btn-bach-tipo[data-val="' + res.modalidad + '"]').trigger('click');
+            $('#sel-modalidad-prepa').val(res.modalidad).trigger('change');
           }
         }
       });
@@ -748,16 +926,30 @@ $(function () {
     $('.btn-bach-tipo').removeClass('btn-primary active').addClass('btn-outline-secondary');
     $(this).removeClass('btn-outline-secondary').addClass('btn-primary active');
     $('#label-selector-periodo').html($(this).data('val') + ' <span class="text-danger">*</span>');
-    if ($('#nivel').val() === 'prepa') {
-      $('#modalidad_val').val($(this).data('val'));
-    }
+    $('#detalle_tramite_val').val($(this).data('val'));
   });
 
   // ── Helpers ─────────────────────────────────────────────────────
   function resetAlumnoFields() {
     $('#num_control, #nombre_alumno, #carrera, #txt-modalidad, #modalidad_val').val('');
+    $('#sel-modalidad-prepa').val('');
     $('#msg-error-alumno').hide();
+    $('#alerta-adeudos').hide();
     $('#nombre_alumno').removeClass('is-valid is-invalid');
+  }
+
+  // ── Verificar adeudos de mensualidad ────────────────────────────
+  function verificarAdeudos(numControl, nivel) {
+    $('#alerta-adeudos').hide();
+    if (!numControl || !nivel || nivel === 'posgrado') return;
+
+    $.get(BASE_URL + 'pagos/verificar-adeudos', { num_control: numControl, nivel: nivel })
+      .done(function (res) {
+        if (res.adeudos && res.adeudos.length > 0) {
+          $('#lista-adeudos').text(res.adeudos.join(', ') + '.');
+          $('#alerta-adeudos').show();
+        }
+      });
   }
 });
 </script>

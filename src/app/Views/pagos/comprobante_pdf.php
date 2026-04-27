@@ -60,13 +60,13 @@ body {
 }
 .logo-placeholder {
     width: 90%;
-    height: 54pt;
+    height: 38pt;
     background: #003087;
     color: white;
     text-align: center;
-    font-size: 14pt;
+    font-size: 12pt;
     font-weight: bold;
-    padding-top: 16pt;
+    padding-top: 10pt;
     border-radius: 3pt;
 }
 .titulo-doc {
@@ -203,7 +203,7 @@ foreach ($copias as $copia):
     <tr>
       <td class="enc-logo-td" colspan="2">
         <?php if (! empty($logoBase64)): ?>
-          <img src="<?= $logoBase64 ?>" style="width:90%; height:auto; max-height:76pt; display:block; margin:0 auto;">
+          <img src="<?= $logoBase64 ?>" style="width:90%; height:auto; max-height:52pt; display:block; margin:0 auto;">
         <?php else: ?>
           <div class="logo-placeholder"><?= esc(strtoupper($nivelLabel)) ?></div>
         <?php endif; ?>
@@ -236,7 +236,17 @@ foreach ($copias as $copia):
     </tr>
     <tr>
       <td class="lbl">Nombre del Alumno</td>
-      <td class="val" colspan="3"><?= esc($pago['nombre_alumno']) ?></td>
+      <?php if ($pago['nivel'] === 'uni'): ?>
+        <td class="val"><?= esc($pago['nombre_alumno']) ?></td>
+        <td class="lbl">Carrera</td>
+        <td class="val"><?= esc($pago['carrera'] ?? '—') ?></td>
+      <?php elseif ($pago['nivel'] === 'posgrado'): ?>
+        <td class="val"><?= esc($pago['nombre_alumno']) ?></td>
+        <td class="lbl">Grado</td>
+        <td class="val"><?= esc($pago['modalidad'] ?? '—') ?></td>
+      <?php else: ?>
+        <td class="val" colspan="3"><?= esc($pago['nombre_alumno']) ?></td>
+      <?php endif; ?>
     </tr>
     <tr>
       <td class="lbl">Concepto</td>
@@ -245,7 +255,7 @@ foreach ($copias as $copia):
       <td class="val"><?= esc($pago['modalidad'] ?? '—') ?></td>
     </tr>
     <tr>
-      <td class="lbl">Periodo</td>
+      <td class="lbl"><?= esc($periodoLabel) ?></td>
       <td class="val" style="font-weight:bold;">
         <?= esc($periodoDisplay) ?>
       </td>

@@ -29,3 +29,17 @@ $routes->get('admin/conceptos', 'ConceptosController::index');
 $routes->post('admin/conceptos/guardar', 'ConceptosController::guardar');
 $routes->post('admin/conceptos/(:num)/actualizar', 'ConceptosController::actualizar/$1');
 $routes->post('admin/conceptos/(:num)/toggle', 'ConceptosController::toggle/$1');
+
+// Adeudos y estado de cuenta
+$routes->get('admin/estado-cuenta', 'AdminController::estadoCuenta');
+$routes->get('admin/morosos', 'AdminController::morosos');
+$routes->get('pagos/verificar-adeudos', 'PagosController::verificarAdeudos');
+
+// Configuración de usuario
+$routes->get('configuracion', 'ConfiguracionController::index');
+$routes->get('configuracion/password', 'ConfiguracionController::cambiarPassword');
+$routes->post('configuracion/password', 'ConfiguracionController::cambiarPassword');
+$routes->get('configuracion/usuarios', 'ConfiguracionController::adminUsuarios');
+$routes->post('configuracion/usuarios/crear', 'ConfiguracionController::crearUsuario');
+$routes->post('configuracion/usuarios/(:num)/toggle', 'ConfiguracionController::toggleUsuario/$1');
+$routes->post('configuracion/usuarios/(:num)/reset', 'ConfiguracionController::resetearPassword/$1');
