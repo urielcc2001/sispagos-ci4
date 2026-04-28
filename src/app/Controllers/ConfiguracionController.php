@@ -96,7 +96,7 @@ class ConfiguracionController extends BaseController
         $rfc     = strtoupper(trim($this->request->getPost('rfc')));
         $rol     = $this->request->getPost('rol');
         $correo  = trim($this->request->getPost('correo'));
-        $usuario = strtolower(trim($this->request->getPost('usuario')));
+        $usuario = trim($this->request->getPost('usuario'));
 
         if (! $nombre || ! $rfc || ! $rol || ! $usuario) {
             return redirect()->to(base_url('configuracion/usuarios'))
@@ -144,6 +144,67 @@ class ConfiguracionController extends BaseController
         }
 
         return redirect()->to(base_url('configuracion/usuarios'));
+    }
+
+    // GET — Datos de un usuario en JSON (para poblar modal de edición)
+    public function editarUsuario(int $id)
+    {
+        $r = $this->requireAdmin();
+        if ($r) return $r;
+
+        $model = new UsuarioModel();
+        $user  = $model->find($id);
+
+        if (! $user) {
+            return $this->response->setStatusCode(404)->setJSON(['error' => 'No encontrado.']);
+        }
+
+        return $this->response->setJSON([
+            'id'      => $user['id'],
+            'nombre'  => $user['nombre'],
+            'usuario' => $user['usuario'],
+            'rfc'     => $user['rfc'] ?? '',
+            'correo'  => $user['correo'] ?? '',
+            'rol'     => $user['rol'],
+        ]);
+    }
+
+    // POST — Actualizar nombre, usuario y RFC (solo admin; no toca contraseña ni rol)
+    public function actualizarUsuario(int $id)
+    {
+        $r = $this->requireAdmin();
+        if ($r) return $r;
+
+        $model = new UsuarioModel();
+
+        if (! $model->find($id)) {
+            return redirect()->to(base_url('configuracion/usuarios'))
+                             ->with('error', 'Usuario no encontrado.');
+        }
+
+        $nombre  = trim($this->request->getPost('nombre'));
+        $usuario = trim($this->request->getPost('usuario'));
+        $rfc     = strtoupper(trim($this->request->getPost('rfc')));
+
+        if (! $nombre || ! $usuario) {
+            return redirect()->to(base_url('configuracion/usuarios'))
+                             ->with('error', 'Nombre y usuario son obligatorios.');
+        }
+
+        $existente = $model->where('usuario', $usuario)->where('id !=', $id)->first();
+        if ($existente) {
+            return redirect()->to(base_url('configuracion/usuarios'))
+                             ->with('error', "El nombre de usuario '$usuario' ya está en uso.");
+        }
+
+        $model->update($id, [
+            'nombre'  => $nombre,
+            'usuario' => $usuario,
+            'rfc'     => $rfc ?: null,
+        ]);
+
+        return redirect()->to(base_url('configuracion/usuarios'))
+                         ->with('success', "Usuario '{$nombre}' actualizado correctamente.");
     }
 
     // POST — Restablecer contraseña al RFC (solo admin)

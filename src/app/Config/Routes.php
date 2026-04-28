@@ -44,6 +44,8 @@ $routes->get('configuracion/usuarios', 'ConfiguracionController::adminUsuarios')
 $routes->post('configuracion/usuarios/crear', 'ConfiguracionController::crearUsuario');
 $routes->post('configuracion/usuarios/(:num)/toggle', 'ConfiguracionController::toggleUsuario/$1');
 $routes->post('configuracion/usuarios/(:num)/reset', 'ConfiguracionController::resetearPassword/$1');
+$routes->get('configuracion/usuarios/(:num)/editar', 'ConfiguracionController::editarUsuario/$1');
+$routes->post('configuracion/usuarios/(:num)/actualizar', 'ConfiguracionController::actualizarUsuario/$1');
 
 // Pagos Externos / Aspirantes
 $routes->get('pagos-externos', 'PagosExternosController::index');

@@ -137,7 +137,7 @@
                   <th>#</th>
                   <th>Nombre</th>
                   <th>Usuario</th>
-                  <th>RFC</th>
+                  <th>CONTRASEÑA/RFC</th>
                   <th>Correo</th>
                   <th>Rol</th>
                   <th>Estado</th>
@@ -167,6 +167,15 @@
                     <?php endif; ?>
                   </td>
                   <td class="text-center text-nowrap">
+                    <!-- Editar -->
+                    <button class="btn btn-sm btn-info btn-editar"
+                            data-id="<?= $u['id'] ?>"
+                            data-nombre="<?= esc($u['nombre']) ?>"
+                            data-usuario="<?= esc($u['usuario']) ?>"
+                            data-rfc="<?= esc($u['rfc'] ?? '') ?>"
+                            title="Editar usuario">
+                      <i class="fas fa-pencil-alt"></i>
+                    </button>
                     <!-- Restablecer contraseña -->
                     <button class="btn btn-sm btn-warning btn-reset"
                             data-id="<?= $u['id'] ?>"
@@ -257,29 +266,56 @@
   </div>
 </div>
 
-<!-- Modal: Confirmar Reset Password -->
-<div class="modal fade" id="modalReset" tabindex="-1">
-  <div class="modal-dialog modal-sm">
-    <form id="formReset" action="" method="POST">
+<!-- Modal: Editar Usuario -->
+<div class="modal fade" id="modalEditar" tabindex="-1">
+  <div class="modal-dialog">
+    <form id="formEditar" action="" method="POST">
       <?= csrf_field() ?>
-      <input type="hidden" name="_method" value="POST">
       <div class="modal-content">
-        <div class="modal-header bg-warning">
-          <h5 class="modal-title"><i class="fas fa-undo mr-2"></i>Restablecer Contraseña</h5>
-          <button type="button" class="close" data-dismiss="modal">&times;</button>
+        <div class="modal-header bg-info text-white">
+          <h5 class="modal-title"><i class="fas fa-pencil-alt mr-2"></i>Editar Usuario</h5>
+          <button type="button" class="close text-white" data-dismiss="modal">&times;</button>
         </div>
-        <div class="modal-body text-center">
-          <p>¿Restablecer la contraseña de <strong id="resetNombre"></strong>?</p>
-          <p class="text-muted">La nueva contraseña será su RFC: <strong id="resetRfc" class="text-dark"></strong></p>
+        <div class="modal-body">
+
+          <div class="form-group">
+            <label>Nombre completo <span class="text-danger">*</span></label>
+            <input type="text" name="nombre" id="edit_nombre" class="form-control" required>
+          </div>
+
+          <div class="row">
+            <div class="col-md-6">
+              <div class="form-group">
+                <label>Usuario (login) <span class="text-danger">*</span></label>
+                <input type="text" name="usuario" id="edit_usuario" class="form-control" required>
+                <small class="text-muted">Respeta mayúsculas/minúsculas.</small>
+              </div>
+            </div>
+            <div class="col-md-6">
+              <div class="form-group">
+                <label>RFC</label>
+                <input type="text" name="rfc" id="edit_rfc" class="form-control"
+                       maxlength="13" style="text-transform:uppercase">
+              </div>
+            </div>
+          </div>
+
         </div>
         <div class="modal-footer">
-          <button type="button" class="btn btn-secondary btn-sm" data-dismiss="modal">Cancelar</button>
-          <button type="submit" class="btn btn-warning btn-sm">Restablecer</button>
+          <button type="button" class="btn btn-secondary" data-dismiss="modal">Cancelar</button>
+          <button type="submit" class="btn btn-info">
+            <i class="fas fa-save mr-1"></i> Guardar cambios
+          </button>
         </div>
       </div>
     </form>
   </div>
 </div>
+
+<!-- Formulario oculto para restablecer contraseña (SweetAlert2 lo dispara) -->
+<form id="formReset" action="" method="POST" style="display:none">
+  <?= csrf_field() ?>
+</form>
 
 <!-- Modal: Confirmar Toggle Estado -->
 <div class="modal fade" id="modalToggle" tabindex="-1">
@@ -308,34 +344,65 @@
 <script src="https://cdn.jsdelivr.net/npm/admin-lte@3.2/dist/js/adminlte.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/datatables.net@1.13.6/js/jquery.dataTables.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/datatables.net-bs4@1.13.6/js/dataTables.bootstrap4.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11/dist/sweetalert2.all.min.js"></script>
 <script>
 $(function () {
   $('#tablaUsuarios').DataTable({
-    language: {
-      url: 'https://cdn.datatables.net/plug-ins/1.13.6/i18n/es-ES.json'
-    },
+    language: { url: 'https://cdn.datatables.net/plug-ins/1.13.6/i18n/es-ES.json' },
     order: [[0, 'asc']],
-    columnDefs: [{ orderable: false, targets: 7 }]
+    columnDefs: [{ orderable: false, targets: [7] }]
   });
 
-  // Abrir modal de reset
+  // Abrir modal de edición (solo nombre, usuario, RFC)
+  $(document).on('click', '.btn-editar', function () {
+    var btn = $(this);
+    $('#edit_nombre').val(btn.data('nombre'));
+    $('#edit_usuario').val(btn.data('usuario'));
+    $('#edit_rfc').val(btn.data('rfc'));
+    $('#formEditar').attr('action', '<?= base_url('configuracion/usuarios/') ?>' + btn.data('id') + '/actualizar');
+    $('#modalEditar').modal('show');
+  });
+
+  // RFC a mayúsculas (crear y editar)
+  $(document).on('input', 'input[name="rfc"]', function () {
+    this.value = this.value.toUpperCase();
+  });
+
+  // Restablecer contraseña con SweetAlert2
   $(document).on('click', '.btn-reset', function () {
     var id     = $(this).data('id');
     var nombre = $(this).data('nombre');
     var rfc    = $(this).data('rfc');
 
     if (! rfc) {
-      alert('Este usuario no tiene RFC registrado. No se puede restablecer la contraseña.');
+      Swal.fire({
+        title: 'Sin RFC registrado',
+        text: 'Este usuario no tiene RFC. No es posible restablecer la contraseña.',
+        icon: 'warning',
+        confirmButtonColor: '#f0ad4e'
+      });
       return;
     }
 
-    $('#resetNombre').text(nombre);
-    $('#resetRfc').text(rfc);
-    $('#formReset').attr('action', '<?= base_url('configuracion/usuarios/') ?>' + id + '/reset');
-    $('#modalReset').modal('show');
+    Swal.fire({
+      title: '¿Restablecer contraseña?',
+      html: 'La nueva clave de <strong>' + nombre + '</strong> será su RFC:<br><code class="text-dark">' + rfc + '</code>',
+      icon: 'warning',
+      showCancelButton: true,
+      confirmButtonColor: '#f0ad4e',
+      cancelButtonColor: '#6c757d',
+      cancelButtonText: 'Cancelar',
+      confirmButtonText: 'Sí, restablecer'
+    }).then(function (result) {
+      if (result.isConfirmed) {
+        $('#formReset')
+          .attr('action', '<?= base_url('configuracion/usuarios/') ?>' + id + '/reset')
+          .submit();
+      }
+    });
   });
 
-  // Abrir modal de toggle estado
+  // Toggle estado con modal Bootstrap
   $(document).on('click', '.btn-toggle', function () {
     var id     = $(this).data('id');
     var nombre = $(this).data('nombre');
@@ -355,11 +422,6 @@ $(function () {
 
     $('#formToggle').attr('action', '<?= base_url('configuracion/usuarios/') ?>' + id + '/toggle');
     $('#modalToggle').modal('show');
-  });
-
-  // Forzar RFC a mayúsculas mientras se escribe
-  $('input[name="rfc"]').on('input', function () {
-    this.value = this.value.toUpperCase();
   });
 });
 </script>
