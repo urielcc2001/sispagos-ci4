@@ -175,11 +175,19 @@ class AdminController extends BaseController
             ->limit(10)
             ->get()->getResultArray();
 
+        $externosRecientes = $db->table('pagos_externos pe')
+            ->select('pe.id, pe.folio_digital, pe.nombre_cliente, pe.concepto, pe.monto, pe.metodo_pago, pe.created_at, u.nombre AS nombre_cajero')
+            ->join('usuarios u', 'u.id = pe.id_cajero', 'left')
+            ->orderBy('pe.created_at', 'DESC')
+            ->limit(10)
+            ->get()->getResultArray();
+
         return view('admin/dashboard', [
-            'totalHoy'       => $totalHoy,
-            'pagosHoy'       => $pagosHoy,
-            'alumnosHoy'     => $alumnosHoy,
-            'pagosRecientes' => $pagosRecientes,
+            'totalHoy'          => $totalHoy,
+            'pagosHoy'          => $pagosHoy,
+            'alumnosHoy'        => $alumnosHoy,
+            'pagosRecientes'    => $pagosRecientes,
+            'externosRecientes' => $externosRecientes,
         ]);
     }
 

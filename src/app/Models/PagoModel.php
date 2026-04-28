@@ -13,6 +13,6 @@ class PagoModel extends Model
     protected $allowedFields = [
         'folio_digital', 'sello_digital', 'num_control', 'nivel', 'nombre_alumno', 'modalidad',
         'carrera', 'concepto', 'detalle_tramite', 'periodo_pago', 'tipo_periodo', 'fecha_pago_real',
-        'monto', 'id_cajero',
+        'monto', 'id_cajero', 'metodo_pago', 'observaciones', 'mes_inicio_ciclo',
     ];
 }

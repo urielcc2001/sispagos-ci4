@@ -73,6 +73,12 @@
               <p>Registrar Pago</p>
             </a>
           </li>
+          <li class="nav-item">
+            <a href="<?= base_url('pagos-externos') ?>" class="nav-link">
+              <i class="nav-icon fas fa-user-tag"></i>
+              <p>Pagos Externos</p>
+            </a>
+          </li>
           <?php if (service('session')->get('rol') === 'admin'): ?>
           <li class="nav-item">
             <a href="<?= base_url('admin/reportes') ?>" class="nav-link">
@@ -301,18 +307,9 @@
 
                 <div class="row align-items-end">
 
-                  <!-- Fecha real de pago (solo mensualidad) -->
-                  <div class="col-md-3" id="grupo-fecha-pago" style="display:none">
-                    <div class="form-group">
-                      <label>Fecha de Pago <span class="text-danger">*</span></label>
-                      <input type="date" name="fecha_pago_real" id="fecha_pago_real" class="form-control">
-                      <small class="text-muted">Para cálculo de recargos</small>
-                    </div>
-                  </div>
-
                   <!-- Normal / Inter (inscripción y reinscripción) -->
                   <div class="col-md-auto" id="grupo-tipo-periodo" style="display:none">
-                    <div class="form-group">
+                    <div class="form-group mb-0">
                       <label class="d-block">Tipo de Periodo <span class="text-danger">*</span></label>
                       <div class="btn-group btn-group-sm" role="group">
                         <button type="button" class="btn btn-outline-primary btn-tipo-periodo" data-val="Normal">Normal</button>
@@ -323,15 +320,60 @@
 
                   <!-- Plan de estudios (solo bachillerato, inscripción/reinscripción) -->
                   <div class="col-md-auto" id="grupo-bach-tipo" style="display:none">
-                    <div class="form-group">
+                    <div class="form-group mb-0">
                       <label class="d-block">Plan de Estudios</label>
                       <div class="btn-group btn-group-sm" role="group">
-                        <button type="button" class="btn btn-outline-secondary btn-bach-tipo active" data-val="Semestral">Semestral</button>
-                        <button type="button" class="btn btn-outline-secondary btn-bach-tipo" data-val="Cuatrimestral">Cuatrimestral</button>
+                        <button type="button" class="btn btn-outline-secondary btn-bach-tipo active" data-val="Semestral">Escolarizado 3 años</button>
+                        <button type="button" class="btn btn-outline-secondary btn-bach-tipo" data-val="Cuatrimestral">Escolarizado 2 años</button>
                       </div>
                     </div>
                   </div>
 
+                  <!-- Mes de inicio de ciclo (solo inscripción) -->
+                  <div class="col-md-3" id="grupo-mes-inicio" style="display:none">
+                    <div class="form-group mb-0">
+                      <label for="sel-mes-inicio">Mes de Inicio de Ciclo <span class="text-danger">*</span></label>
+                      <select id="sel-mes-inicio" class="form-control form-control-sm">
+                        <option value="1">Enero</option>
+                        <option value="2">Febrero</option>
+                        <option value="3">Marzo</option>
+                        <option value="4">Abril</option>
+                        <option value="5">Mayo</option>
+                        <option value="6">Junio</option>
+                        <option value="7">Julio</option>
+                        <option value="8">Agosto</option>
+                        <option value="9">Septiembre</option>
+                        <option value="10">Octubre</option>
+                        <option value="11">Noviembre</option>
+                        <option value="12">Diciembre</option>
+                      </select>
+                    </div>
+                  </div>
+
+                </div>
+
+                <!-- Rejilla de meses — mensualidad no-posgrado -->
+                <div id="grupo-meses-mensualidad" class="mt-3" style="display:none">
+                  <div class="d-flex justify-content-between align-items-center mb-2">
+                    <label class="font-weight-bold mb-0">
+                      Selecciona el Mes a Pagar <span class="text-danger">*</span>
+                    </label>
+                    <span id="badge-mes-seleccionado" class="badge badge-primary px-2"
+                          style="display:none; font-size:.85rem"></span>
+                  </div>
+                  <div id="grid-meses-mensualidad" class="mb-3">
+                    <span class="text-muted small">Ingresa el número de control para ver el estado de los meses.</span>
+                  </div>
+                  <div class="row">
+                    <div class="col-md-3">
+                      <div class="form-group mb-0">
+                        <label for="fecha_pago_real">Fecha de Pago <span class="text-danger">*</span></label>
+                        <input type="date" name="fecha_pago_real" id="fecha_pago_real"
+                               class="form-control form-control-sm">
+                        <small class="text-muted">Para cálculo de recargos</small>
+                      </div>
+                    </div>
+                  </div>
                 </div>
 
                 <!-- Materia a pagar (solo posgrado + mensualidad) -->
@@ -363,6 +405,27 @@
               <input type="hidden" name="periodo_pago" id="periodo_pago_val">
               <input type="hidden" name="tipo_periodo" id="tipo_periodo_val">
               <input type="hidden" name="detalle_tramite" id="detalle_tramite_val">
+              <input type="hidden" name="mes_inicio_ciclo" id="mes_inicio_ciclo_val">
+
+              <!-- ── Campos administrativos ──────────────────────────────── -->
+              <div class="row mt-3">
+                <div class="col-md-3">
+                  <div class="form-group mb-0">
+                    <label for="metodo_pago">Método de Pago</label>
+                    <select name="metodo_pago" id="metodo_pago" class="form-control">
+                      <option value="Efectivo" selected>Efectivo</option>
+                      <option value="Transferencia">Transferencia</option>
+                    </select>
+                  </div>
+                </div>
+                <div class="col-md-9">
+                  <div class="form-group mb-0">
+                    <label for="observaciones">Observaciones</label>
+                    <textarea name="observaciones" id="observaciones" class="form-control"
+                              rows="2" placeholder="Notas adicionales (opcional)"></textarea>
+                  </div>
+                </div>
+              </div>
 
             </div><!-- /.card-body -->
 
@@ -522,6 +585,9 @@ $(function () {
           }
           sugerirPeriodo();
           verificarAdeudos(numControl, nivel);
+          if ($('#concepto').val() === 'mensualidad' && nivel !== 'posgrado') {
+            cargarMesesMensualidad();
+          }
         } else if (nivel === 'posgrado') {
           $('#msg-error-alumno')
             .removeClass('text-danger').addClass('text-info')
@@ -570,12 +636,14 @@ $(function () {
     setTimeout(function () {
       resetAlumnoFields();
       $('#grupo-modalidad-sel, #grupo-modalidad-prepa, #grupo-carrera, #grupo-modalidad-txt, #grupo-tramite').hide();
-      $('#grupo-dinamico, #grupo-fecha-pago, #grupo-tipo-periodo, #grupo-bach-tipo, #grupo-selector-periodo, #grupo-materia-posgrado').hide();
+      $('#grupo-dinamico, #grupo-tipo-periodo, #grupo-bach-tipo, #grupo-selector-periodo, #grupo-materia-posgrado, #grupo-meses-mensualidad').hide();
       $('#nombre_alumno').prop('readonly', true).removeClass('is-valid is-invalid');
-      $('#periodo_pago_val, #tipo_periodo_val, #detalle_tramite_val').val('');
+      $('#periodo_pago_val, #tipo_periodo_val, #detalle_tramite_val, #mes_inicio_ciclo_val').val('');
       $('#sel-modalidad-prepa, #sel-materia-posgrado').val('');
       $('#btn-periodo-grid').empty();
       $('.btn-tipo-periodo').removeClass('btn-primary active').addClass('btn-outline-primary');
+      $('#grid-meses-mensualidad').html('<span class="text-muted small">Ingresa el número de control para ver el estado de los meses.</span>');
+      $('#badge-mes-seleccionado').hide();
     }, 10);
   });
 
@@ -741,6 +809,73 @@ $(function () {
     'SEMINARIO DE TESIS DOCTORAL III',
   ];
 
+  // ── Mes inicio ciclo change → hidden field ───────────────────────
+  $('#sel-mes-inicio').on('change', function () {
+    $('#mes_inicio_ciclo_val').val($(this).val());
+  });
+
+  // ── Carga estado de meses para mensualidad ───────────────────────
+  function cargarMesesMensualidad() {
+    const numControl = $('#num_control').val().trim();
+    const nivel      = $('#nivel').val();
+    const $grid      = $('#grid-meses-mensualidad');
+
+    $('#periodo_pago_val').val('');
+    $('#badge-mes-seleccionado').hide();
+
+    if (!numControl || !nivel) {
+      $grid.html('<span class="text-muted small">Ingresa el número de control para ver el estado de los meses.</span>');
+      return;
+    }
+
+    $grid.html('<span class="text-muted"><i class="fas fa-spinner fa-spin mr-1"></i> Cargando...</span>');
+
+    $.get(BASE_URL + 'pagos/estado-mensualidades', { num_control: numControl, nivel: nivel })
+      .done(function (res) {
+        if (!res.meses || res.meses.length === 0) {
+          $grid.html('<span class="text-warning small"><i class="fas fa-exclamation-triangle mr-1"></i> El alumno no tiene inscripción registrada.</span>');
+          return;
+        }
+        renderizarMesesGrid(res.meses);
+      })
+      .fail(function () {
+        $grid.html('<span class="text-danger small">Error al cargar el estado de los meses.</span>');
+      });
+  }
+
+  function renderizarMesesGrid(meses) {
+    const $grid = $('#grid-meses-mensualidad');
+    $grid.empty();
+
+    meses.forEach(function (m) {
+      let cls, icon, disabled;
+
+      if (m.status === 'pagado') {
+        cls      = 'btn btn-success btn-sm mr-1 mb-1';
+        icon     = '<i class="fas fa-check mr-1"></i>';
+        disabled = true;
+      } else if (m.status === 'pendiente') {
+        cls      = 'btn btn-danger btn-sm mr-1 mb-1 btn-mes-mensualidad';
+        icon     = '';
+        disabled = false;
+      } else {
+        cls      = 'btn btn-secondary btn-sm mr-1 mb-1';
+        icon     = '';
+        disabled = true;
+      }
+
+      const $btn = $('<button type="button">')
+        .addClass(cls)
+        .css('min-width', '68px')
+        .html(icon + m.nombre.substring(0, 3))
+        .attr('data-mes', m.mes)
+        .attr('data-nombre', m.nombre)
+        .prop('disabled', disabled);
+
+      $grid.append($btn);
+    });
+  }
+
   // ── Materia posgrado change → hidden field ──────────────────────
   $(document).on('change', '#sel-materia-posgrado', function () {
     $('#detalle_tramite_val').val($(this).val());
@@ -764,7 +899,7 @@ $(function () {
     const concepto = $('#concepto').val();
 
     $('#grupo-dinamico').hide();
-    $('#grupo-fecha-pago, #grupo-tipo-periodo, #grupo-bach-tipo, #grupo-selector-periodo, #grupo-materia-posgrado').hide();
+    $('#grupo-tipo-periodo, #grupo-bach-tipo, #grupo-selector-periodo, #grupo-materia-posgrado, #grupo-mes-inicio, #grupo-meses-mensualidad').hide();
     $('#periodo_pago_val, #tipo_periodo_val, #detalle_tramite_val').val('');
     $('#sel-materia-posgrado').val('');
     $('#btn-periodo-grid').empty();
@@ -782,9 +917,8 @@ $(function () {
       }
       const hoy = new Date().toISOString().split('T')[0];
       $('#fecha_pago_real').val(hoy);
-      $('#periodo_pago_val').val(new Date().getMonth() + 1);
-      $('#grupo-fecha-pago').show();
-      sugerirPeriodo();
+      $('#grupo-meses-mensualidad').show();
+      cargarMesesMensualidad();
 
     } else if (concepto === 'inscripcion') {
       $('#grupo-tipo-periodo').show();
@@ -797,6 +931,12 @@ $(function () {
       } else {
         $('#label-selector-periodo').html('Periodo <span class="text-danger">*</span>');
       }
+
+      // Inicializar mes de inicio con el mes actual y mostrarlo
+      const mesActual = new Date().getMonth() + 1;
+      $('#sel-mes-inicio').val(mesActual);
+      $('#mes_inicio_ciclo_val').val(mesActual);
+      $('#grupo-mes-inicio').show();
 
       generarBotonesGrid(1, 1, 'num');
       $('#grupo-selector-periodo').show();
@@ -855,20 +995,12 @@ $(function () {
     return txt;
   }
 
-  // ── Fecha pago real → extrae mes automáticamente ────────────────
-  $(document).on('change', '#fecha_pago_real', function () {
-    const val = $(this).val();
-    if (val) {
-      $('#periodo_pago_val').val(parseInt(val.split('-')[1], 10));
-    }
-  });
-
   // ── Precarga: sugiere el siguiente periodo ───────────────────────
   function sugerirPeriodo() {
     const numControl = $('#num_control').val().trim();
     const concepto   = $('#concepto').val();
 
-    if (!numControl || !concepto || concepto === 'inscripcion' || concepto === 'tramite') return;
+    if (!numControl || !concepto || concepto === 'inscripcion' || concepto === 'tramite' || concepto === 'mensualidad') return;
 
     $.get(BASE_URL + 'pagos/ultimo-pago', { num_control: numControl, concepto: concepto })
       .done(function (res) {
@@ -924,6 +1056,23 @@ $(function () {
     $('.btn-tipo-periodo').removeClass('btn-primary active').addClass('btn-outline-primary');
     $(this).removeClass('btn-outline-primary').addClass('btn-primary active');
     $('#tipo_periodo_val').val($(this).data('val'));
+  });
+
+  $(document).on('click', '.btn-mes-mensualidad:not(:disabled)', function () {
+    const mesNum    = $(this).data('mes');
+    const mesNombre = $(this).data('nombre');
+
+    if ($(this).hasClass('btn-primary')) {
+      $(this).removeClass('btn-primary').addClass('btn-danger');
+      $('#periodo_pago_val').val('');
+      $('#badge-mes-seleccionado').hide();
+      return;
+    }
+
+    $('.btn-mes-mensualidad.btn-primary').removeClass('btn-primary').addClass('btn-danger');
+    $(this).removeClass('btn-danger').addClass('btn-primary');
+    $('#periodo_pago_val').val(mesNum);
+    $('#badge-mes-seleccionado').text(mesNombre + ' ' + new Date().getFullYear()).show();
   });
 
   $(document).on('click', '.btn-bach-tipo', function () {

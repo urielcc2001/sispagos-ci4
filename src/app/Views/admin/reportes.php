@@ -64,6 +64,12 @@
             </a>
           </li>
           <li class="nav-item">
+            <a href="<?= base_url('pagos-externos') ?>" class="nav-link">
+              <i class="nav-icon fas fa-user-tag"></i>
+              <p>Pagos Externos</p>
+            </a>
+          </li>
+          <li class="nav-item">
             <a href="<?= base_url('admin/reportes') ?>" class="nav-link active">
               <i class="nav-icon fas fa-chart-bar"></i>
               <p>Reportes</p>

@@ -26,6 +26,23 @@ class AdeudoModel
             ->getRowArray() ?: null;
     }
 
+    // ── Ancla: mes/año real de inicio del ciclo ─────────────────────
+    //   Si la inscripción tiene mes_inicio_ciclo, ese es el punto de partida.
+    //   Si ese mes es mayor que el mes real de inscripción, el año retrocede uno.
+
+    private function getAnclaInscripcion(array $inscripcion): array
+    {
+        $mesReal = (int) date('n', strtotime($inscripcion['created_at']));
+        $anio    = (int) date('Y', strtotime($inscripcion['created_at']));
+        $mes     = ! empty($inscripcion['mes_inicio_ciclo'])
+                   ? (int) $inscripcion['mes_inicio_ciclo']
+                   : $mesReal;
+        if ($mes > $mesReal) {
+            $anio--;
+        }
+        return ['anio' => $anio, 'mes' => $mes];
+    }
+
     // ── Mensualidades pagadas (como claves "YYYY-MM") ────────────────
 
     public function getPagadosYearMonth(string $numControl, string $nivel): array
@@ -56,12 +73,13 @@ class AdeudoModel
         $anioHoy     = (int) date('Y');
         $mesHoy      = (int) date('n');
 
-        $inscAnio = $inscripcion ? (int) date('Y', strtotime($inscripcion['created_at'])) : null;
-        $inscMes  = $inscripcion ? (int) date('n', strtotime($inscripcion['created_at'])) : null;
+        $ancla    = $inscripcion ? $this->getAnclaInscripcion($inscripcion) : null;
+        $inscAnio = $ancla['anio'] ?? null;
+        $inscMes  = $ancla['mes']  ?? null;
 
         $estado = [];
         for ($mes = 1; $mes <= 12; $mes++) {
-            // Meses anteriores a la inscripción → no aplica
+            // Meses anteriores al inicio del ciclo → no aplica
             if ($inscAnio !== null) {
                 if ($anio < $inscAnio || ($anio === $inscAnio && $mes < $inscMes)) {
                     $estado[] = ['mes' => $mes, 'nombre' => self::$meses[$mes], 'status' => 'na'];
@@ -95,8 +113,9 @@ class AdeudoModel
         }
 
         $pagados  = $this->getPagadosYearMonth($numControl, $nivel);
-        $anioInsc = (int) date('Y', strtotime($inscripcion['created_at']));
-        $mesInsc  = (int) date('n', strtotime($inscripcion['created_at']));
+        $ancla    = $this->getAnclaInscripcion($inscripcion);
+        $anioInsc = $ancla['anio'];
+        $mesInsc  = $ancla['mes'];
         $anioHoy  = (int) date('Y');
         $mesHoy   = (int) date('n');
 
@@ -128,7 +147,7 @@ class AdeudoModel
     {
         $inscripcion = $this->getInscripcion($numControl, $nivel);
         $anioHoy     = (int) date('Y');
-        $anioInicio  = $inscripcion ? (int) date('Y', strtotime($inscripcion['created_at'])) : $anioHoy;
+        $anioInicio  = $inscripcion ? $this->getAnclaInscripcion($inscripcion)['anio'] : $anioHoy;
 
         $anios = [];
         for ($y = $anioHoy; $y >= $anioInicio; $y--) {

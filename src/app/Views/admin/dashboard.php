@@ -64,6 +64,12 @@
             </a>
           </li>
           <li class="nav-item">
+            <a href="<?= base_url('pagos-externos') ?>" class="nav-link">
+              <i class="nav-icon fas fa-user-tag"></i>
+              <p>Pagos Externos</p>
+            </a>
+          </li>
+          <li class="nav-item">
             <a href="<?= base_url('admin/reportes') ?>" class="nav-link">
               <i class="nav-icon fas fa-chart-bar"></i>
               <p>Reportes</p>
@@ -169,6 +175,15 @@
               </div>
               <div class="card-body p-0">
                 <table class="table table-striped table-hover table-sm mb-0">
+                  <colgroup>
+                    <col style="width:17%">
+                    <col>
+                    <col style="width:12%">
+                    <col style="width:9%">
+                    <col style="width:10%">
+                    <col style="width:11%">
+                    <col style="width:9%">
+                  </colgroup>
                   <thead class="thead-light">
                     <tr>
                       <th>Folio</th>
@@ -260,6 +275,95 @@
         </div>
         <!-- /tabla -->
 
+        <!-- ── Tabla de Pagos Externos Recientes ────────────────── -->
+        <div class="row mt-2">
+          <div class="col-12">
+            <div class="card card-outline card-success">
+              <div class="card-header">
+                <h3 class="card-title">
+                  <i class="fas fa-user-tag mr-2"></i>Últimos Pagos Externos / Aspirantes
+                </h3>
+              </div>
+              <div class="card-body p-0">
+                <table class="table table-striped table-hover table-sm mb-0">
+                  <colgroup>
+                    <col style="width:17%">
+                    <col>
+                    <col style="width:12%">
+                    <col style="width:9%">
+                    <col style="width:10%">
+                    <col style="width:11%">
+                    <col style="width:9%">
+                  </colgroup>
+                  <thead class="thead-light">
+                    <tr>
+                      <th>Folio</th>
+                      <th>Cliente / Aspirante</th>
+                      <th>Concepto</th>
+                      <th class="text-right">Monto</th>
+                      <th>Cajero</th>
+                      <th>Fecha / Hora</th>
+                      <th class="text-center">Acción</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <?php if (empty($externosRecientes)): ?>
+                      <tr>
+                        <td colspan="7" class="text-center text-muted py-4">
+                          <i class="fas fa-inbox fa-2x mb-2 d-block"></i>
+                          No hay pagos externos registrados aún.
+                        </td>
+                      </tr>
+                    <?php else: ?>
+                    <?php foreach ($externosRecientes as $e): ?>
+                    <tr>
+                      <td>
+                        <code class="text-primary" style="font-size:0.78rem;">
+                          <?= esc($e['folio_digital'] ?? '—') ?>
+                        </code>
+                      </td>
+                      <td><?= esc($e['nombre_cliente']) ?></td>
+                      <td><?= esc($e['concepto']) ?></td>
+                      <td class="text-right font-weight-bold">
+                        $<?= number_format((float) $e['monto'], 2) ?>
+                      </td>
+                      <td><?= esc($e['nombre_cajero'] ?? 'N/D') ?></td>
+                      <td class="text-nowrap text-muted" style="font-size:0.82rem;">
+                        <?= date('d/m/Y H:i', strtotime($e['created_at'])) ?>
+                      </td>
+                      <td class="text-center text-nowrap">
+                        <?php if (! empty($e['folio_digital'])): ?>
+                          <a href="<?= base_url('pagos-externos/comprobante/' . esc($e['folio_digital'])) ?>"
+                             target="_blank"
+                             class="btn btn-xs btn-outline-secondary"
+                             title="Reimprimir recibo">
+                            <i class="fas fa-print"></i>
+                          </a>
+                        <?php endif; ?>
+                        <a href="<?= base_url('admin/pagos-externos/' . $e['id'] . '/editar') ?>"
+                           class="btn btn-xs btn-outline-warning"
+                           title="Editar">
+                          <i class="fas fa-pencil-alt"></i>
+                        </a>
+                        <button type="button"
+                                class="btn btn-xs btn-outline-danger btn-eliminar-externo"
+                                data-id="<?= $e['id'] ?>"
+                                data-folio="<?= esc($e['folio_digital'] ?? $e['id']) ?>"
+                                title="Eliminar">
+                          <i class="fas fa-trash-alt"></i>
+                        </button>
+                      </td>
+                    </tr>
+                    <?php endforeach; ?>
+                    <?php endif; ?>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        </div>
+        <!-- /tabla externos -->
+
       </div>
     </section>
   </div><!-- /.content-wrapper -->
@@ -270,7 +374,7 @@
 
 </div><!-- /.wrapper -->
 
-<!-- Modal Confirmar Eliminación -->
+<!-- Modal Eliminar Pago Regular -->
 <div class="modal fade" id="modal-eliminar" tabindex="-1" role="dialog" aria-hidden="true">
   <div class="modal-dialog modal-dialog-centered" role="document">
     <div class="modal-content">
@@ -301,6 +405,37 @@
   </div>
 </div>
 
+<!-- Modal Eliminar Pago Externo -->
+<div class="modal fade" id="modal-eliminar-externo" tabindex="-1" role="dialog" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered" role="document">
+    <div class="modal-content">
+      <div class="modal-header bg-danger">
+        <h5 class="modal-title text-white">
+          <i class="fas fa-exclamation-triangle mr-2"></i>Confirmar Eliminación
+        </h5>
+        <button type="button" class="close text-white" data-dismiss="modal">
+          <span aria-hidden="true">&times;</span>
+        </button>
+      </div>
+      <div class="modal-body">
+        <p>¿Estás seguro de eliminar el pago externo <strong id="folio-externo-a-eliminar"></strong>?</p>
+        <p class="text-danger mb-0"><i class="fas fa-exclamation-circle mr-1"></i>Esta acción no se puede deshacer.</p>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-default" data-dismiss="modal">
+          <i class="fas fa-times mr-1"></i> Cancelar
+        </button>
+        <form id="form-eliminar-externo" method="post" style="display:inline">
+          <?= csrf_field() ?>
+          <button type="submit" class="btn btn-danger">
+            <i class="fas fa-trash-alt mr-1"></i> Sí, eliminar
+          </button>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.6.0/jquery.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@4.6.1/dist/js/bootstrap.bundle.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/admin-lte@3.2/dist/js/adminlte.min.js"></script>
@@ -313,6 +448,14 @@ $(function () {
     $('#folio-a-eliminar').text(folio);
     $('#form-eliminar').attr('action', BASE_URL + 'admin/pagos/' + id + '/eliminar');
     $('#modal-eliminar').modal('show');
+  });
+
+  $(document).on('click', '.btn-eliminar-externo', function () {
+    const id    = $(this).data('id');
+    const folio = $(this).data('folio');
+    $('#folio-externo-a-eliminar').text(folio);
+    $('#form-eliminar-externo').attr('action', BASE_URL + 'admin/pagos-externos/' + id + '/eliminar');
+    $('#modal-eliminar-externo').modal('show');
   });
 });
 </script>

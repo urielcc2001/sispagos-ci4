@@ -34,6 +34,7 @@ $routes->post('admin/conceptos/(:num)/toggle', 'ConceptosController::toggle/$1')
 $routes->get('admin/estado-cuenta', 'AdminController::estadoCuenta');
 $routes->get('admin/morosos', 'AdminController::morosos');
 $routes->get('pagos/verificar-adeudos', 'PagosController::verificarAdeudos');
+$routes->get('pagos/estado-mensualidades', 'PagosController::estadoMensualidades');
 
 // Configuración de usuario
 $routes->get('configuracion', 'ConfiguracionController::index');
@@ -43,3 +44,12 @@ $routes->get('configuracion/usuarios', 'ConfiguracionController::adminUsuarios')
 $routes->post('configuracion/usuarios/crear', 'ConfiguracionController::crearUsuario');
 $routes->post('configuracion/usuarios/(:num)/toggle', 'ConfiguracionController::toggleUsuario/$1');
 $routes->post('configuracion/usuarios/(:num)/reset', 'ConfiguracionController::resetearPassword/$1');
+
+// Pagos Externos / Aspirantes
+$routes->get('pagos-externos', 'PagosExternosController::index');
+$routes->post('pagos-externos/registrar', 'PagosExternosController::registrar');
+$routes->get('pagos-externos/comprobante/(:segment)', 'PagosExternosController::comprobante/$1');
+$routes->get('pagos-externos/validar/(:any)', 'PagosExternosController::validar/$1');
+$routes->get('admin/pagos-externos/(:num)/editar', 'PagosExternosController::editar/$1');
+$routes->post('admin/pagos-externos/(:num)/actualizar', 'PagosExternosController::actualizar/$1');
+$routes->post('admin/pagos-externos/(:num)/eliminar', 'PagosExternosController::eliminar/$1');

@@ -65,6 +65,12 @@
               <p>Registrar Pago</p>
             </a>
           </li>
+          <li class="nav-item">
+            <a href="<?= base_url('pagos-externos') ?>" class="nav-link">
+              <i class="nav-icon fas fa-user-tag"></i>
+              <p>Pagos Externos</p>
+            </a>
+          </li>
           <?php if (service('session')->get('rol') === 'admin'): ?>
           <li class="nav-item">
             <a href="<?= base_url('admin/reportes') ?>" class="nav-link">

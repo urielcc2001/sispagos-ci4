@@ -37,6 +37,26 @@ class PagosController extends BaseController
         return $this->response->setJSON(['adeudos' => $adeudos]);
     }
 
+    public function estadoMensualidades()
+    {
+        if (! service('session')->get('logged_in')) {
+            return $this->response->setStatusCode(401)->setJSON([]);
+        }
+
+        $numControl = trim($this->request->getGet('num_control') ?? '');
+        $nivel      = $this->request->getGet('nivel') ?? '';
+
+        if (! $numControl || ! $nivel || $nivel === 'posgrado') {
+            return $this->response->setJSON(['meses' => []]);
+        }
+
+        $model = new \App\Models\AdeudoModel();
+        $anio  = (int) date('Y');
+        $meses = $model->getEstadoCuentaMensual($numControl, $nivel, $anio);
+
+        return $this->response->setJSON(['meses' => $meses, 'anio' => $anio]);
+    }
+
     public function tramitesDisponibles()
     {
         if (! service('session')->get('logged_in')) {
@@ -230,6 +250,11 @@ class PagosController extends BaseController
             'fecha_pago_real' => $fechaPagoReal,
             'monto'           => $this->request->getPost('monto'),
             'id_cajero'       => service('session')->get('id_usuario'),
+            'metodo_pago'      => $this->request->getPost('metodo_pago') ?: 'Efectivo',
+            'observaciones'    => $this->request->getPost('observaciones') ?: null,
+            'mes_inicio_ciclo' => $concepto === 'inscripcion'
+                                  ? ($this->request->getPost('mes_inicio_ciclo') ?: null)
+                                  : null,
         ];
 
         $model = new PagoModel();
@@ -445,17 +470,24 @@ class PagosController extends BaseController
             }
 
             if ($fechaPagoReal) {
-                $mesInsc  = (int) date('n', strtotime($inscripcion['created_at']));
-                $anioInsc = (int) date('Y', strtotime($inscripcion['created_at']));
+                $mesReal  = (int) date('n', strtotime($inscripcion['created_at']));
+                $anioRef  = (int) date('Y', strtotime($inscripcion['created_at']));
+                $mesAncla = ! empty($inscripcion['mes_inicio_ciclo'])
+                            ? (int) $inscripcion['mes_inicio_ciclo']
+                            : $mesReal;
+                if ($mesAncla > $mesReal) {
+                    $anioRef--;
+                }
+
                 $mesMens  = (int) date('n', strtotime($fechaPagoReal));
                 $anioMens = (int) date('Y', strtotime($fechaPagoReal));
 
-                $tsInsc = mktime(0, 0, 0, $mesInsc, 1, $anioInsc);
-                $tsMens = mktime(0, 0, 0, $mesMens, 1, $anioMens);
+                $tsAncla = mktime(0, 0, 0, $mesAncla, 1, $anioRef);
+                $tsMens  = mktime(0, 0, 0, $mesMens,  1, $anioMens);
 
-                if ($tsMens < $tsInsc) {
-                    return 'No se puede registrar una mensualidad anterior a la inscripción '
-                        . '(' . $meses[$mesInsc - 1] . ' ' . $anioInsc . ').';
+                if ($tsMens < $tsAncla) {
+                    return 'No se puede registrar una mensualidad anterior al inicio del ciclo '
+                        . '(' . $meses[$mesAncla - 1] . ' ' . $anioRef . ').';
                 }
             }
         }
