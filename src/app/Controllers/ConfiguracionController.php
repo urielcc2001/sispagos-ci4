@@ -185,10 +185,12 @@ class ConfiguracionController extends BaseController
         $nombre  = trim($this->request->getPost('nombre'));
         $usuario = trim($this->request->getPost('usuario'));
         $rfc     = strtoupper(trim($this->request->getPost('rfc')));
+        $correo  = trim($this->request->getPost('correo'));
+        $rol     = $this->request->getPost('rol');
 
-        if (! $nombre || ! $usuario) {
+        if (! $nombre || ! $usuario || ! $rol) {
             return redirect()->to(base_url('configuracion/usuarios'))
-                             ->with('error', 'Nombre y usuario son obligatorios.');
+                             ->with('error', 'Nombre, usuario y rol son obligatorios.');
         }
 
         $existente = $model->where('usuario', $usuario)->where('id !=', $id)->first();
@@ -201,6 +203,8 @@ class ConfiguracionController extends BaseController
             'nombre'  => $nombre,
             'usuario' => $usuario,
             'rfc'     => $rfc ?: null,
+            'correo'  => $correo ?: null,
+            'rol'     => $rol,
         ]);
 
         return redirect()->to(base_url('configuracion/usuarios'))

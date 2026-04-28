@@ -173,6 +173,8 @@
                             data-nombre="<?= esc($u['nombre']) ?>"
                             data-usuario="<?= esc($u['usuario']) ?>"
                             data-rfc="<?= esc($u['rfc'] ?? '') ?>"
+                            data-correo="<?= esc($u['correo'] ?? '') ?>"
+                            data-rol="<?= esc($u['rol']) ?>"
                             title="Editar usuario">
                       <i class="fas fa-pencil-alt"></i>
                     </button>
@@ -300,6 +302,24 @@
             </div>
           </div>
 
+          <div class="row">
+            <div class="col-md-6">
+              <div class="form-group">
+                <label>Correo electrónico</label>
+                <input type="email" name="correo" id="edit_correo" class="form-control">
+              </div>
+            </div>
+            <div class="col-md-6">
+              <div class="form-group">
+                <label>Rol <span class="text-danger">*</span></label>
+                <select name="rol" id="edit_rol" class="form-control" required>
+                  <option value="cajero">Cajero</option>
+                  <option value="admin">Administrador</option>
+                </select>
+              </div>
+            </div>
+          </div>
+
         </div>
         <div class="modal-footer">
           <button type="button" class="btn btn-secondary" data-dismiss="modal">Cancelar</button>
@@ -359,6 +379,8 @@ $(function () {
     $('#edit_nombre').val(btn.data('nombre'));
     $('#edit_usuario').val(btn.data('usuario'));
     $('#edit_rfc').val(btn.data('rfc'));
+    $('#edit_correo').val(btn.data('correo'));
+    $('#edit_rol').val(btn.data('rol'));
     $('#formEditar').attr('action', '<?= base_url('configuracion/usuarios/') ?>' + btn.data('id') + '/actualizar');
     $('#modalEditar').modal('show');
   });
