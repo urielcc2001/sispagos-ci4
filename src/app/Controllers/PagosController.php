@@ -122,20 +122,65 @@ class PagosController extends BaseController
 
         if ($nivel === 'posgrado') {
             $db  = \Config\Database::connect('uni');
-            $row = $db->table('alumnos_datos_personales')
-                      ->select('Nombres, apellido_paterno, apellido_materno')
-                      ->where('numero_control', $numControl)
+            $row = $db->table('alumnos_datos_personales adp')
+                      ->select('adp.Nombres, adp.apellido_paterno, adp.apellido_materno,
+                                lic.id AS clavelicen, lic.licenciaturas AS programa,
+                                gm.cuatrisem, gm.generacion')
+                      ->join('grupos_modalidad gm', 'gm.id_grupos = adp.id_grupo', 'left')
+                      ->join('licenciaturas lic', 'lic.id = gm.licenciatura', 'left')
+                      ->where('adp.numero_control', $numControl)
                       ->get()->getRowArray();
 
             if (! $row) {
                 return $this->response->setJSON(['found' => false, 'external' => true]);
             }
 
+            $materias = [];
+            if (! empty($row['clavelicen'])) {
+                $matRows = $db->table('materias')
+                              ->select('materia, clavemateria')
+                              ->where('clavelicen', $row['clavelicen'])
+                              ->orderBy('id', 'ASC')
+                              ->get()->getResultArray();
+
+                if (! empty($matRows)) {
+                    $matNombres  = array_column($matRows, 'materia');
+                    $dbApp       = \Config\Database::connect();
+                    $pagadasRows = $dbApp->table('pagos')
+                                        ->select('detalle_tramite')
+                                        ->where('num_control', $numControl)
+                                        ->where('nivel', 'posgrado')
+                                        ->where('concepto', 'mensualidad')
+                                        ->whereIn('detalle_tramite', $matNombres)
+                                        ->get()->getResultArray();
+                    $pagadasSet  = array_fill_keys(array_column($pagadasRows, 'detalle_tramite'), true);
+
+                    foreach ($matRows as $m) {
+                        $materias[] = [
+                            'nombre' => $m['materia'],
+                            'clave'  => $m['clavemateria'] ?? '',
+                            'pagada' => isset($pagadasSet[$m['materia']]),
+                        ];
+                    }
+                }
+            }
+
+            $programa  = $row['programa'] ?? '';
+            $modalidad = null;
+            if (mb_stripos($programa, 'maestr') !== false) {
+                $modalidad = 'Maestría';
+            } elseif (mb_stripos($programa, 'doctor') !== false) {
+                $modalidad = 'Doctorado';
+            }
+
             return $this->response->setJSON([
-                'found'    => true,
-                'nombre'   => trim("{$row['Nombres']} {$row['apellido_paterno']} {$row['apellido_materno']}"),
-                'carrera'  => null,
-                'modalidad' => null,
+                'found'      => true,
+                'nombre'     => trim("{$row['Nombres']} {$row['apellido_paterno']} {$row['apellido_materno']}"),
+                'carrera'    => $programa,
+                'modalidad'  => $modalidad,
+                'cuatrisem'  => $row['cuatrisem'] ?? null,
+                'generacion' => $row['generacion'] ?? null,
+                'materias'   => $materias,
             ]);
         }
 
@@ -332,6 +377,8 @@ class PagosController extends BaseController
         $conceptoLabel = $conceptos[$pago['concepto']] ?? $pago['concepto'];
         if ($pago['concepto'] === 'tramite' && ! empty($pago['detalle_tramite'])) {
             $conceptoLabel .= ' — ' . ($detalles[$pago['detalle_tramite']] ?? $pago['detalle_tramite']);
+        } elseif ($pago['nivel'] === 'posgrado' && $pago['concepto'] === 'mensualidad') {
+            $conceptoLabel = mb_stripos($pago['modalidad'] ?? '', 'doctor') !== false ? 'Materia D' : 'Materia M';
         }
 
         $mesesNombres  = ['Enero','Febrero','Marzo','Abril','Mayo','Junio',

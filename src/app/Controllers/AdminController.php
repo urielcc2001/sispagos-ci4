@@ -46,7 +46,7 @@ class AdminController extends BaseController
 
         if ($origen !== 'externos') {
             $b = $db->table('pagos p')
-                ->select('p.id, p.folio_digital, p.num_control, p.nombre_alumno AS nombre, p.concepto, p.detalle_tramite, p.nivel, p.monto, p.created_at, u.nombre AS nombre_cajero')
+                ->select('p.id, p.folio_digital, p.num_control, p.nombre_alumno AS nombre, p.concepto, p.detalle_tramite, p.nivel, p.modalidad, p.monto, p.created_at, u.nombre AS nombre_cajero')
                 ->join('usuarios u', 'u.id = p.id_cajero', 'left');
             if ($fechaInicio) $b->where('DATE(p.created_at) >=', $fechaInicio);
             if ($fechaFin)    $b->where('DATE(p.created_at) <=', $fechaFin);
@@ -122,7 +122,9 @@ class AdminController extends BaseController
 
             if ($p['tipo_pago'] === 'alumno') {
                 $concepto = $conceptoLabels[$p['concepto']] ?? $p['concepto'];
-                if ($p['concepto'] === 'tramite' && ! empty($p['detalle_tramite'])) {
+                if (($p['nivel'] ?? '') === 'posgrado' && $p['concepto'] === 'mensualidad') {
+                    $concepto = mb_stripos($p['modalidad'] ?? '', 'doctor') !== false ? 'Materia D' : 'Materia M';
+                } elseif ($p['concepto'] === 'tramite' && ! empty($p['detalle_tramite'])) {
                     $concepto .= ' - ' . $p['detalle_tramite'];
                 }
             } else {
@@ -235,7 +237,7 @@ class AdminController extends BaseController
                 ->countAllResults();
 
             $pagosRecientes = $db->table('pagos p')
-                ->select('p.id, p.folio_digital, p.nombre_alumno, p.concepto, p.detalle_tramite, p.monto, p.created_at, u.nombre AS nombre_cajero')
+                ->select('p.id, p.folio_digital, p.nombre_alumno, p.concepto, p.detalle_tramite, p.nivel, p.modalidad, p.monto, p.created_at, u.nombre AS nombre_cajero')
                 ->join('usuarios u', 'u.id = p.id_cajero', 'left')
                 ->orderBy('p.created_at', 'DESC')
                 ->limit(10)
@@ -286,7 +288,7 @@ class AdminController extends BaseController
 
             // Actividad reciente unificada
             $rawAlumnos = $db->table('pagos p')
-                ->select('p.id, p.folio_digital, p.nombre_alumno AS nombre, p.concepto, p.detalle_tramite, p.monto, p.created_at')
+                ->select('p.id, p.folio_digital, p.nombre_alumno AS nombre, p.concepto, p.detalle_tramite, p.nivel, p.modalidad, p.monto, p.created_at')
                 ->where('p.id_cajero', $idUsuario)
                 ->orderBy('p.created_at', 'DESC')
                 ->limit(15)
@@ -407,21 +409,69 @@ class AdminController extends BaseController
         $anio       = (int) ($this->request->getGet('anio') ?? date('Y'));
 
         $data = [
-            'num_control'    => $numControl,
-            'nivel'          => $nivel,
-            'anio'           => $anio,
-            'estado'         => [],
-            'info_alumno'    => null,
-            'anios'          => [],
-            'inscripciones'  => [],
-            'pagos_otros'    => [],
-            'totales'        => null,
-            'directa_anio'   => false,
-            'periodo_actual' => null,
+            'num_control'     => $numControl,
+            'nivel'           => $nivel,
+            'anio'            => $anio,
+            'estado'          => [],
+            'info_alumno'     => null,
+            'anios'           => [],
+            'inscripciones'   => [],
+            'pagos_otros'     => [],
+            'totales'         => null,
+            'directa_anio'    => false,
+            'periodo_actual'  => null,
+            'es_posgrado'     => ($nivel === 'posgrado'),
+            'materias_estado' => [],
         ];
 
         if ($numControl && $nivel) {
-            $model                  = new \App\Models\AdeudoModel();
+            $model = new \App\Models\AdeudoModel();
+
+            if ($nivel === 'posgrado') {
+                $dbUni   = \Config\Database::connect('uni');
+                $alumRow = $dbUni->table('alumnos_datos_personales adp')
+                                 ->select('lic.id AS clavelicen')
+                                 ->join('grupos_modalidad gm', 'gm.id_grupos = adp.id_grupo', 'left')
+                                 ->join('licenciaturas lic', 'lic.id = gm.licenciatura', 'left')
+                                 ->where('adp.numero_control', $numControl)
+                                 ->get()->getRowArray();
+
+                if ($alumRow && ! empty($alumRow['clavelicen'])) {
+                    $matRows = $dbUni->table('materias')
+                                     ->select('materia, clavemateria')
+                                     ->where('clavelicen', $alumRow['clavelicen'])
+                                     ->orderBy('id', 'ASC')
+                                     ->get()->getResultArray();
+
+                    if (! empty($matRows)) {
+                        $matNombres = array_column($matRows, 'materia');
+                        $dbApp      = \Config\Database::connect();
+                        $pagosRows  = $dbApp->table('pagos')
+                                            ->select('detalle_tramite, folio_digital, monto, created_at')
+                                            ->where('num_control', $numControl)
+                                            ->where('nivel', 'posgrado')
+                                            ->where('concepto', 'mensualidad')
+                                            ->whereIn('detalle_tramite', $matNombres)
+                                            ->get()->getResultArray();
+                        $pagosMap = [];
+                        foreach ($pagosRows as $p) {
+                            $pagosMap[$p['detalle_tramite']] = $p;
+                        }
+                        foreach ($matRows as $m) {
+                            $pago = $pagosMap[$m['materia']] ?? null;
+                            $data['materias_estado'][] = [
+                                'nombre' => $m['materia'],
+                                'clave'  => $m['clavemateria'] ?? '',
+                                'pagada' => $pago !== null,
+                                'folio'  => $pago['folio_digital'] ?? null,
+                                'fecha'  => $pago ? date('d/m/Y', strtotime($pago['created_at'])) : null,
+                                'monto'  => $pago ? (float) $pago['monto'] : null,
+                            ];
+                        }
+                    }
+                }
+            }
+
             $data['estado']         = $model->getEstadoCuentaMensual($numControl, $nivel, $anio);
             $data['info_alumno']    = $model->getInfoAlumno($numControl, $nivel);
             $data['anios']          = $model->getAniosConPagos($numControl, $nivel);

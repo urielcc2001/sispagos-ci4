@@ -265,7 +265,9 @@
               <?php
                 if ($p['tipo_pago'] === 'alumno') {
                     $concepto = $conceptoLabels[$p['concepto']] ?? $p['concepto'];
-                    if ($p['concepto'] === 'tramite' && ! empty($p['detalle_tramite'])) {
+                    if (($p['nivel'] ?? '') === 'posgrado' && $p['concepto'] === 'mensualidad') {
+                        $concepto = mb_stripos($p['modalidad'] ?? '', 'doctor') !== false ? 'Materia D' : 'Materia M';
+                    } elseif ($p['concepto'] === 'tramite' && ! empty($p['detalle_tramite'])) {
                         $concepto .= ' / ' . ($detalleLabels[$p['detalle_tramite']] ?? $p['detalle_tramite']);
                     }
                 } else {

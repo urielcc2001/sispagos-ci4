@@ -96,14 +96,10 @@
               </div>
             </div>
 
-            <div class="col-md-2" id="grupo-modalidad-sel" style="display:none">
+            <div class="col-md-2" id="grupo-generacion-posgrado" style="display:none">
               <div class="form-group">
-                <label for="sel-modalidad">Modalidad</label>
-                <select id="sel-modalidad" class="form-control">
-                  <option value="">— Selecciona —</option>
-                  <option value="Maestría">Maestría</option>
-                  <option value="Doctorado">Doctorado</option>
-                </select>
+                <label>Generación</label>
+                <input type="text" id="txt-generacion" class="form-control bg-light" readonly placeholder="—">
               </div>
             </div>
 
@@ -254,16 +250,20 @@
               </div>
             </div>
 
-            <div id="grupo-materia-posgrado" style="display:none">
-              <div class="row mt-2">
-                <div class="col-md-8">
-                  <div class="form-group mb-0">
-                    <label for="sel-materia-posgrado">Materia a Pagar <span class="text-danger">*</span></label>
-                    <select id="sel-materia-posgrado" class="form-control">
-                      <option value="">— Selecciona Maestría o Doctorado primero —</option>
-                    </select>
-                  </div>
-                </div>
+            <div id="grupo-materia-posgrado" style="display:none" class="mt-2">
+              <div class="d-flex justify-content-between align-items-center mb-2">
+                <label class="font-weight-bold mb-0">
+                  Selecciona la Materia a Pagar <span class="text-danger">*</span>
+                </label>
+                <span id="badge-materia-seleccionada" class="badge badge-primary px-2"
+                      style="display:none; font-size:.8rem; max-width:60%; white-space:normal; text-align:right"></span>
+              </div>
+              <div id="grid-materias-posgrado" class="mb-2">
+                <span class="text-muted small">Busca al alumno para ver las materias del programa.</span>
+              </div>
+              <div class="mt-1">
+                <span class="badge badge-success mr-2"><i class="fas fa-check mr-1"></i>Pagada</span>
+                <span class="badge badge-secondary"><i class="fas fa-clock mr-1"></i>Pendiente</span>
               </div>
             </div>
 
@@ -392,27 +392,24 @@ $(function () {
 
     $('#nombre_alumno').prop('readonly', !esPosgrado);
 
-    $('#grupo-modalidad-sel').toggle(esPosgrado);
     $('#grupo-modalidad-prepa').toggle(esPrepa);
-    $('#grupo-carrera').toggle(esUni);
+    $('#grupo-carrera').toggle(esUni || esPosgrado);
+    $('#grupo-carrera label').text(esPosgrado ? 'Programa de Posgrado' : 'Carrera / Licenciatura');
     $('#grupo-modalidad-txt').toggle(esUni);
+    $('#grupo-generacion-posgrado').toggle(esPosgrado);
 
     $('#concepto option[value="mensualidad"]').text(esPosgrado ? 'Materia' : 'Mensualidad');
-    $('#sel-modalidad').val('');
     $('#sel-modalidad-prepa').val('');
     $('#modalidad_val').val('');
+    if (esPosgrado) {
+      $('#carrera').val('');
+      $('#txt-generacion').val('');
+      window._posgradoMaterias = [];
+    }
     $('#detalle_tramite_val').val('');
     actualizarPeriodo();
     if ($('#concepto').val() === 'tramite') {
       cargarTramites();
-    }
-  });
-
-  // ── Modalidad posgrado → campo oculto + actualizar lista materias ─
-  $('#sel-modalidad').on('change', function () {
-    $('#modalidad_val').val($(this).val());
-    if ($('#nivel').val() === 'posgrado' && $('#concepto').val() === 'mensualidad') {
-      actualizarListaMaterias();
     }
   });
 
@@ -440,7 +437,12 @@ $(function () {
           $('#nombre_alumno').val(res.nombre).addClass('is-valid');
           $('#carrera').val(res.carrera ?? '');
           if (nivel === 'posgrado') {
-            // nombre pre-filled but still editable; grado from #sel-modalidad
+            $('#modalidad_val').val(res.modalidad ?? '');
+            $('#txt-generacion').val(res.generacion ?? '');
+            window._posgradoMaterias = res.materias || [];
+            if ($('#concepto').val() === 'mensualidad') {
+              actualizarListaMaterias();
+            }
           } else if (nivel !== 'prepa') {
             $('#txt-modalidad').val(res.modalidad ?? '');
             $('#modalidad_val').val(res.modalidad ?? '');
@@ -506,15 +508,19 @@ $(function () {
     setTimeout(function () {
       resetAlumnoFields();
       $('#aviso-mensualidad-directa').remove();
-      $('#grupo-modalidad-sel, #grupo-modalidad-prepa, #grupo-carrera, #grupo-modalidad-txt, #grupo-tramite').hide();
+      $('#grupo-modalidad-prepa, #grupo-carrera, #grupo-modalidad-txt, #grupo-tramite, #grupo-generacion-posgrado').hide();
+      $('#carrera, #txt-generacion').val('');
+      window._posgradoMaterias = [];
       $('#grupo-dinamico, #grupo-tipo-periodo, #grupo-bach-tipo, #grupo-selector-periodo, #grupo-materia-posgrado, #grupo-meses-mensualidad').hide();
       $('#nombre_alumno').prop('readonly', true).removeClass('is-valid is-invalid');
       $('#periodo_pago_val, #tipo_periodo_val, #detalle_tramite_val, #mes_inicio_ciclo_val').val('');
-      $('#sel-modalidad-prepa, #sel-materia-posgrado').val('');
+      $('#sel-modalidad-prepa').val('');
       $('#btn-periodo-grid').empty();
       $('.btn-tipo-periodo').removeClass('btn-primary active').addClass('btn-outline-primary');
       $('#grid-meses-mensualidad').html('<span class="text-muted small">Ingresa el número de control para ver el estado de los meses.</span>');
       $('#badge-mes-seleccionado').hide();
+      $('#grid-materias-posgrado').html('<span class="text-muted small">Busca al alumno para ver las materias del programa.</span>');
+      $('#badge-materia-seleccionada').hide();
     }, 10);
   });
 
@@ -643,41 +649,7 @@ $(function () {
   const MESES = ['Enero','Febrero','Marzo','Abril','Mayo','Junio',
                  'Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
 
-  const MATERIAS_MAESTRIA = [
-    'PROBLEMAS POLÍTICOS Y SOCIOECONÓMICOS EN EDUCACIÓN',
-    'CORRIENTES PEDAGÓGICAS ACTUALES',
-    'PROCESOS DE ENSEÑANZA APRENDIZAJE',
-    'ADMINISTRACION EDUCATIVA',
-    'PLANEACION ESTRETEGICA',
-    'METODOLOGIA DE LA INVESTIGACION EDUCATIVA',
-    'SOFTWARE EDUCATIVO',
-    'LEGISLACION EDUCATIVA',
-    'GESTION DE PROYECTOS',
-    'PLANEACION Y DESARROLLO CURRICULAR',
-    'EVALUACION EDUCATIVA',
-    'DIRECCION DE INSTITUCIONES EDUCATIVAS',
-    'MODELOS PARA LA TOMA DE DECISIONES',
-    'ADMINISTRACIÓN DE PERSONAL',
-    'PROMOCIÓN E IMAGEN INSTITUCIONAL',
-    'MODELOS DE EVALUACIÓN INSTITUCIONAL',
-    'GESTIÓN DE LA CALIDAD EN LA EDUCACIÓN',
-    'SEMINARIO DE INVESTIGACIÓN EDUCATIVA',
-  ];
-
-  const MATERIAS_DOCTORADO = [
-    'SEMINARIO DE INVESTIGACIÓN',
-    'GESTIÓN EDUCATIVA',
-    'TALLER DE COMUNICACIÓN EDUCATIVA',
-    'INVESTIGACIÓN EDUCATIVA',
-    'TECNOLOGÍA EN LA EDUCACIÓN',
-    'SEMINARIO DE TESIS DOCTORAL I',
-    'FORMACIÓN DOCENTE',
-    'ANÁLISIS Y DISEÑO CURRICULAR',
-    'SEMINARIO DE TESIS DOCTORAL II',
-    'TEORÍA DEL APRENDIZAJE',
-    'PLANEACIÓN ESTRATÉGICA Y GESTIÓN EDUCATIVA',
-    'SEMINARIO DE TESIS DOCTORAL III',
-  ];
+  window._posgradoMaterias = [];
 
   // ── Mes inicio ciclo change → hidden field ───────────────────────
   $('#sel-mes-inicio').on('change', function () {
@@ -759,22 +731,80 @@ $(function () {
     });
   }
 
-  // ── Materia posgrado change → hidden field ──────────────────────
-  $(document).on('change', '#sel-materia-posgrado', function () {
-    $('#detalle_tramite_val').val($(this).val());
-  });
-
+  // ── Malla de materias posgrado ──────────────────────────────────
   function actualizarListaMaterias() {
-    const grado = $('#sel-modalidad').val();
-    const $sel  = $('#sel-materia-posgrado');
-    $sel.empty().append('<option value="">— Selecciona materia —</option>');
-    const lista = grado === 'Maestría' ? MATERIAS_MAESTRIA :
-                  grado === 'Doctorado' ? MATERIAS_DOCTORADO : [];
-    lista.forEach(function (m) {
-      $sel.append('<option value="' + m + '">' + m + '</option>');
-    });
+    const lista = window._posgradoMaterias || [];
+    const $grid = $('#grid-materias-posgrado');
+    $grid.empty();
     $('#detalle_tramite_val').val('');
+    $('#badge-materia-seleccionada').hide();
+
+    if (lista.length === 0) {
+      $grid.css('display', '');
+      $grid.html('<span class="text-muted small">Sin materias disponibles para este programa.</span>');
+      return;
+    }
+
+    $grid.css({
+      'display'              : 'grid',
+      'grid-template-columns': 'repeat(6, 1fr)',
+      'gap'                  : '8px',
+    });
+
+    lista.forEach(function (m) {
+      const pagada = !!m.pagada;
+      const $btn   = $('<button type="button">')
+        .addClass('btn btn-sm btn-materia-posgrado' + (pagada ? ' btn-success' : ' btn-outline-secondary'))
+        .css({
+          'height'         : '76px',
+          'width'          : '100%',
+          'display'        : 'flex',
+          'flex-direction' : 'column',
+          'align-items'    : 'center',
+          'justify-content': 'center',
+          'padding'        : '6px 8px',
+          'overflow'       : 'hidden',
+        })
+        .attr('data-nombre', m.nombre)
+        .attr('data-clave', m.clave || '')
+        .prop('disabled', pagada)
+        .html(
+          (pagada
+            ? '<i class="fas fa-check-circle mb-1" style="font-size:.8rem"></i>'
+            : '<i class="fas fa-clock mb-1" style="font-size:.8rem; opacity:.5"></i>') +
+          '<span style="font-size:.68rem; font-weight:600; line-height:1.25; text-align:center;' +
+                'display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden;">' +
+            escHtml(m.nombre) + '</span>' +
+          (m.clave
+            ? '<span style="font-size:.63rem; opacity:.6; margin-top:2px; text-align:center">' +
+                escHtml(m.clave) + '</span>'
+            : '')
+        );
+      $grid.append($btn);
+    });
   }
+
+  function escHtml(s) {
+    return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  }
+
+  $(document).on('click', '.btn-materia-posgrado:not(:disabled)', function () {
+    const nombre = $(this).data('nombre');
+    const clave  = $(this).data('clave');
+    const activo = $(this).hasClass('btn-primary');
+
+    $('.btn-materia-posgrado:not(:disabled)').removeClass('btn-primary').addClass('btn-outline-secondary');
+
+    if (activo) {
+      $('#detalle_tramite_val').val('');
+      $('#badge-materia-seleccionada').hide();
+    } else {
+      $(this).removeClass('btn-outline-secondary').addClass('btn-primary');
+      $('#detalle_tramite_val').val(nombre);
+      const label = clave ? nombre + ' (' + clave + ')' : nombre;
+      $('#badge-materia-seleccionada').text(label).show();
+    }
+  });
 
   // ── Periodo de pago ─────────────────────────────────────────────
   function actualizarPeriodo() {
@@ -784,7 +814,8 @@ $(function () {
     $('#grupo-dinamico').hide();
     $('#grupo-tipo-periodo, #grupo-bach-tipo, #grupo-selector-periodo, #grupo-materia-posgrado, #grupo-mes-inicio, #grupo-meses-mensualidad').hide();
     $('#periodo_pago_val, #tipo_periodo_val, #detalle_tramite_val').val('');
-    $('#sel-materia-posgrado').val('');
+    $('#grid-materias-posgrado').html('<span class="text-muted small">Busca al alumno para ver las materias del programa.</span>');
+    $('#badge-materia-seleccionada').hide();
     $('#btn-periodo-grid').empty();
     $('.btn-tipo-periodo').removeClass('btn-primary active').addClass('btn-outline-primary');
 

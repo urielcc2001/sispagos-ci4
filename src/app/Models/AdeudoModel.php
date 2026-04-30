@@ -443,33 +443,126 @@ class AdeudoModel
         ];
     }
 
-    // ── Reporte de morosos ───────────────────────────────────────────
+    // ── Reporte de morosos (híbrido: meses para uni/prepa, materias para posgrado) ──
 
     public function getMorosos(?string $nivel = null): array
     {
-        $db = \Config\Database::connect();
+        $morosos = [];
 
-        // Tomamos alumnos que tienen inscripcion (ancla correcta)
-        $query = $db->table('pagos')
-            ->select('num_control, nivel, MAX(nombre_alumno) AS nombre_alumno, MAX(carrera) AS carrera')
-            ->where('concepto', 'inscripcion');
-
-        if ($nivel) {
-            $query->where('nivel', $nivel);
+        // Posgrado: detección por materias del cuatrimestre actual
+        if ($nivel === null || $nivel === 'posgrado') {
+            $morosos = $this->getMorososPosgrado();
         }
 
-        $alumnos = $query->groupBy('num_control, nivel')->get()->getResultArray();
+        // Licenciatura / Prepa: detección por meses desde inscripción
+        if ($nivel !== 'posgrado') {
+            $db    = \Config\Database::connect();
+            $query = $db->table('pagos')
+                ->select('num_control, nivel, MAX(nombre_alumno) AS nombre_alumno, MAX(carrera) AS carrera')
+                ->where('concepto', 'inscripcion');
+
+            if ($nivel) {
+                $query->where('nivel', $nivel);
+            } else {
+                $query->whereIn('nivel', ['uni', 'prepa']);
+            }
+
+            $alumnos = $query->groupBy('num_control, nivel')->get()->getResultArray();
+
+            foreach ($alumnos as $alumno) {
+                $adeudos = $this->getAdeudosMensualidadDesdeInscripcion(
+                    $alumno['num_control'],
+                    $alumno['nivel']
+                );
+                if (! empty($adeudos)) {
+                    $morosos[] = [
+                        'num_control'   => $alumno['num_control'],
+                        'nivel'         => $alumno['nivel'],
+                        'nombre_alumno' => $alumno['nombre_alumno'],
+                        'carrera'       => $alumno['carrera'] ?? '—',
+                        'adeudos'       => $adeudos,
+                        'total_adeudos' => count($adeudos),
+                    ];
+                }
+            }
+        }
+
+        usort($morosos, fn($a, $b) => $b['total_adeudos'] <=> $a['total_adeudos']);
+
+        return $morosos;
+    }
+
+    // ── Morosos de Posgrado: materias sin pagar del cuatrimestre actual ──
+
+    private function getMorososPosgrado(): array
+    {
+        $db    = \Config\Database::connect();
+        $dbUni = \Config\Database::connect('uni');
+
+        // Todos los alumnos de posgrado con al menos un pago registrado
+        $alumnos = $db->table('pagos')
+            ->select('num_control, MAX(nombre_alumno) AS nombre_alumno, MAX(carrera) AS carrera, MAX(modalidad) AS modalidad')
+            ->where('nivel', 'posgrado')
+            ->groupBy('num_control')
+            ->get()->getResultArray();
 
         $morosos = [];
+
         foreach ($alumnos as $alumno) {
-            $adeudos = $this->getAdeudosMensualidadDesdeInscripcion(
-                $alumno['num_control'],
-                $alumno['nivel']
-            );
+            $numControl = $alumno['num_control'];
+
+            // Obtener clavelicen y cuatrimestre actual desde la DB académica
+            $row = $dbUni->table('alumnos_datos_personales adp')
+                ->select('lic.id AS clavelicen, gm.cuatrisem')
+                ->join('grupos_modalidad gm', 'gm.id_grupos = adp.id_grupo', 'left')
+                ->join('licenciaturas lic', 'lic.id = gm.licenciatura', 'left')
+                ->where('adp.numero_control', $numControl)
+                ->get()->getRowArray();
+
+            if (empty($row['clavelicen'])) {
+                continue;
+            }
+
+            // Materias del cuatrimestre actual del alumno
+            $matQ = $dbUni->table('materias')
+                ->select('materia, clavemateria')
+                ->where('clavelicen', $row['clavelicen']);
+
+            if (! empty($row['cuatrisem'])) {
+                $matQ->where('cuatrimestre', $row['cuatrisem']);
+            }
+
+            $materias = $matQ->orderBy('id', 'ASC')->get()->getResultArray();
+
+            if (empty($materias)) {
+                continue;
+            }
+
+            // Materias ya pagadas por este alumno
+            $matNombres = array_column($materias, 'materia');
+            $pagadas    = $db->table('pagos')
+                ->select('detalle_tramite')
+                ->where('num_control', $numControl)
+                ->where('nivel', 'posgrado')
+                ->where('concepto', 'mensualidad')
+                ->whereIn('detalle_tramite', $matNombres)
+                ->get()->getResultArray();
+
+            $pagadasSet = array_fill_keys(array_column($pagadas, 'detalle_tramite'), true);
+
+            $prefix  = mb_stripos($alumno['modalidad'] ?? '', 'doctor') !== false ? 'Materia D' : 'Materia M';
+            $adeudos = [];
+
+            foreach ($materias as $mat) {
+                if (! isset($pagadasSet[$mat['materia']])) {
+                    $adeudos[] = $prefix . ' — ' . $mat['materia'];
+                }
+            }
+
             if (! empty($adeudos)) {
                 $morosos[] = [
-                    'num_control'   => $alumno['num_control'],
-                    'nivel'         => $alumno['nivel'],
+                    'num_control'   => $numControl,
+                    'nivel'         => 'posgrado',
                     'nombre_alumno' => $alumno['nombre_alumno'],
                     'carrera'       => $alumno['carrera'] ?? '—',
                     'adeudos'       => $adeudos,

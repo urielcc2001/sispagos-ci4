@@ -130,7 +130,9 @@
                 <?php
                     if ($a['tipo_pago'] === 'alumno') {
                         $concepto = $conceptoLabels[$a['concepto']] ?? $a['concepto'];
-                        if ($a['concepto'] === 'tramite' && ! empty($a['detalle_tramite'])) {
+                        if (($a['nivel'] ?? '') === 'posgrado' && $a['concepto'] === 'mensualidad') {
+                            $concepto = mb_stripos($a['modalidad'] ?? '', 'doctor') !== false ? 'Materia D' : 'Materia M';
+                        } elseif ($a['concepto'] === 'tramite' && ! empty($a['detalle_tramite'])) {
                             $concepto .= ' / ' . $a['detalle_tramite'];
                         }
                         $comprobanteUrl = base_url('pagos/comprobante/' . urlencode($a['folio_digital'] ?? ''));
@@ -241,7 +243,9 @@
                 <?php foreach ($pagosRecientes as $p): ?>
                 <?php
                     $concepto = $conceptoLabels[$p['concepto']] ?? $p['concepto'];
-                    if ($p['concepto'] === 'tramite' && ! empty($p['detalle_tramite'])) {
+                    if (($p['nivel'] ?? '') === 'posgrado' && $p['concepto'] === 'mensualidad') {
+                        $concepto = mb_stripos($p['modalidad'] ?? '', 'doctor') !== false ? 'Materia D' : 'Materia M';
+                    } elseif ($p['concepto'] === 'tramite' && ! empty($p['detalle_tramite'])) {
                         $concepto .= ' / ' . ($detalleLabels[$p['detalle_tramite']] ?? $p['detalle_tramite']);
                     }
                 ?>

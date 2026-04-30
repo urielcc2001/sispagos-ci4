@@ -42,8 +42,9 @@
                class="btn <?= $nivel === 'posgrado' ? 'btn-danger' : 'btn-outline-danger' ?>">Posgrado</a>
           </div>
           <span class="text-muted">
-            Mostrando adeudos de mensualidades del año
-            <strong><?= date('Y') ?></strong>
+            Uni/Prepa: mensualidades del año <strong><?= date('Y') ?></strong>
+            &nbsp;·&nbsp;
+            Posgrado: materias del cuatrimestre actual
           </span>
         </form>
       </div>
@@ -61,7 +62,7 @@
           <div class="text-center py-5 text-muted">
             <i class="fas fa-check-circle fa-3x text-success mb-3 d-block"></i>
             <h5>¡Sin adeudos detectados!</h5>
-            <p>Todos los alumnos están al corriente en sus mensualidades de <?= date('Y') ?>.</p>
+            <p>No se detectaron adeudos de mensualidades ni materias pendientes.</p>
           </div>
         <?php else: ?>
           <?php
@@ -73,8 +74,8 @@
                 <th>No. Control</th>
                 <th>Alumno</th>
                 <th>Nivel</th>
-                <th class="text-center">Meses Pendientes</th>
-                <th>Periodos con Adeudo</th>
+                <th class="text-center">Pendientes</th>
+                <th>Adeudos Detectados</th>
                 <th class="text-center">Acciones</th>
               </tr>
             </thead>

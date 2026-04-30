@@ -82,8 +82,13 @@
       <?php
         $nivelLabels    = ['uni' => 'Universidad', 'prepa' => 'Bachillerato', 'posgrado' => 'Posgrado'];
         $conceptoLabels = ['inscripcion' => 'Inscripción', 'reinscripcion' => 'Reinscripción', 'tramite' => 'Trámite'];
-        $pagados    = count(array_filter($estado, fn($e) => $e['status'] === 'pagado'));
-        $pendientes = count(array_filter($estado, fn($e) => $e['status'] === 'pendiente'));
+        if ($es_posgrado) {
+            $pagados    = count(array_filter($materias_estado, fn($m) => $m['pagada']));
+            $pendientes = count(array_filter($materias_estado, fn($m) => ! $m['pagada']));
+        } else {
+            $pagados    = count(array_filter($estado, fn($e) => $e['status'] === 'pagado'));
+            $pendientes = count(array_filter($estado, fn($e) => $e['status'] === 'pendiente'));
+        }
       ?>
 
       <!-- ── Encabezado del alumno ──────────────────────────────── -->
@@ -112,11 +117,17 @@
             <?php endif; ?>
             <?php if ($pendientes > 0): ?>
               <span class="badge badge-danger p-2">
-                <i class="fas fa-exclamation-triangle mr-1"></i><?= $pendientes ?> mes(es) pendiente(s) en <?= $anio ?>
+                <i class="fas fa-exclamation-triangle mr-1"></i>
+                <?php if ($es_posgrado): ?>
+                  <?= $pendientes ?> materia(s) pendiente(s)
+                <?php else: ?>
+                  <?= $pendientes ?> mes(es) pendiente(s) en <?= $anio ?>
+                <?php endif; ?>
               </span>
             <?php else: ?>
               <span class="badge badge-success p-2">
-                <i class="fas fa-check mr-1"></i>Al corriente en <?= $anio ?>
+                <i class="fas fa-check mr-1"></i>
+                <?= $es_posgrado ? 'Materias al corriente' : 'Al corriente en ' . $anio ?>
               </span>
             <?php endif; ?>
           </div>
@@ -241,12 +252,17 @@
         </div>
       </div>
 
-      <!-- ═══ BLOQUE B — Mensualidades ═══ -->
+      <!-- ═══ BLOQUE B — Mensualidades / Materias ═══ -->
       <div class="card card-outline card-primary">
         <div class="card-header">
           <h3 class="card-title">
-            <i class="fas fa-calendar-alt mr-2 text-primary"></i>
-            Bloque B — Mensualidades <?= $anio ?>
+            <?php if ($es_posgrado): ?>
+              <i class="fas fa-book-open mr-2 text-primary"></i>
+              Bloque B — Materias del Programa
+            <?php else: ?>
+              <i class="fas fa-calendar-alt mr-2 text-primary"></i>
+              Bloque B — Mensualidades <?= $anio ?>
+            <?php endif; ?>
           </h3>
           <div class="card-tools">
             <span class="badge badge-success p-2 mr-1">
@@ -259,100 +275,173 @@
             <?php endif; ?>
             <?php if ($totales && $totales['mensualidades'] > 0): ?>
             <span class="badge badge-primary p-2">
-              Subtotal histórico: $<?= number_format($totales['mensualidades'], 2) ?>
+              Subtotal: $<?= number_format($totales['mensualidades'], 2) ?>
             </span>
             <?php endif; ?>
           </div>
         </div>
         <div class="card-body">
 
-          <?php if (! empty($anios)): ?>
-          <div class="mb-4">
-            <label class="text-muted text-uppercase font-weight-bold" style="font-size:.75rem">Año consultado</label>
-            <div class="d-flex flex-wrap">
-              <?php foreach ($anios as $y): ?>
-                <a href="?num_control=<?= urlencode($num_control) ?>&nivel=<?= urlencode($nivel) ?>&anio=<?= $y ?>"
-                   class="btn btn-sm <?= $y == $anio ? 'btn-primary' : 'btn-outline-secondary' ?> mr-1 mb-1">
-                  <?= $y ?>
-                </a>
-              <?php endforeach; ?>
+          <?php if ($es_posgrado): ?>
+
+            <!-- ── Malla de Materias (Posgrado) ── -->
+            <?php if (empty($materias_estado)): ?>
+            <div class="callout callout-warning">
+              <i class="fas fa-exclamation-circle mr-2"></i>
+              No se encontraron materias registradas para el programa de este alumno.
             </div>
-          </div>
-          <?php endif; ?>
-
-          <?php if ($directa_anio): ?>
-          <div class="callout callout-info mb-3">
-            <i class="fas fa-info-circle mr-2"></i>
-            <strong>Ciclo <?= $anio ?> iniciado mediante mensualidad directa.</strong>
-            No se encontró inscripción ni reinscripción para este año.
-            Los meses anteriores al primer pago registrado se muestran en gris
-            (<i class="fas fa-minus"></i>) y <strong>no se contabilizan como adeudos</strong>,
-            ya que podrían haberse liquidado fuera del sistema.
-          </div>
-          <?php endif; ?>
-
-          <div class="row">
-            <?php foreach ($estado as $e): ?>
-              <?php
-                switch ($e['status']) {
-                    case 'pagado':
-                        $cardClass = 'bg-success text-white';
-                        $icon      = '<i class="fas fa-check-circle fa-2x"></i>';
-                        break;
-                    case 'pendiente':
-                        $cardClass = 'bg-danger text-white';
-                        $icon      = '<i class="fas fa-times-circle fa-2x"></i>';
-                        break;
-                    case 'na':
-                        $cardClass = 'bg-white text-muted border';
-                        $icon      = '<i class="fas fa-minus fa-2x text-muted" style="opacity:.35"></i>';
-                        break;
-                    default:
-                        $cardClass = 'bg-light text-muted';
-                        $icon      = '<i class="fas fa-clock fa-2x text-muted"></i>';
-                }
-              ?>
-              <div class="col-md-2 col-sm-3 col-4 mb-3">
-                <div class="card mb-0 shadow-sm <?= $cardClass ?>" style="border-radius:8px">
-                  <div class="card-body text-center py-3 px-2">
-                    <p class="mb-2 font-weight-bold" style="font-size:.85rem; letter-spacing:.03rem">
-                      <?= $e['nombre'] ?>
-                    </p>
-                    <?= $icon ?>
-                    <?php if ($e['status'] === 'pagado' && ! empty($e['folio_digital'])): ?>
-                    <div class="mt-2">
-                      <a href="<?= base_url('pagos/comprobante/' . urlencode($e['folio_digital'])) ?>"
-                         target="_blank"
-                         class="btn btn-xs btn-light text-dark"
-                         title="Reimprimir comprobante">
-                        <i class="fas fa-print"></i>
-                      </a>
+            <?php else: ?>
+            <div class="row">
+              <?php foreach ($materias_estado as $m): ?>
+              <div class="col-lg-3 col-md-4 col-sm-6 col-12 mb-3">
+                <div class="card mb-0 shadow-sm h-100 <?= $m['pagada'] ? 'border-success' : 'border-secondary' ?>"
+                     style="border-left-width:4px; border-left-style:solid; border-radius:6px">
+                  <div class="card-body py-2 px-3">
+                    <div class="d-flex align-items-start justify-content-between mb-1">
+                      <span class="font-weight-bold" style="font-size:.78rem; line-height:1.3; flex:1">
+                        <?= esc($m['nombre']) ?>
+                      </span>
+                      <?php if ($m['pagada']): ?>
+                        <i class="fas fa-check-circle text-success ml-2 mt-1" style="font-size:1rem; flex-shrink:0"></i>
+                      <?php else: ?>
+                        <i class="fas fa-clock text-secondary ml-2 mt-1" style="font-size:1rem; opacity:.5; flex-shrink:0"></i>
+                      <?php endif; ?>
                     </div>
+                    <?php if ($m['clave']): ?>
+                      <small class="text-muted d-block mb-1" style="font-size:.68rem"><?= esc($m['clave']) ?></small>
+                    <?php endif; ?>
+                    <?php if ($m['pagada']): ?>
+                      <div class="mt-1 pt-1 border-top">
+                        <div class="d-flex justify-content-between align-items-center">
+                          <div>
+                            <small class="text-muted d-block" style="font-size:.65rem"><?= $m['fecha'] ?></small>
+                            <span class="text-success font-weight-bold" style="font-size:.8rem">
+                              $<?= number_format($m['monto'], 2) ?>
+                            </span>
+                          </div>
+                          <?php if ($m['folio']): ?>
+                          <a href="<?= base_url('pagos/comprobante/' . urlencode($m['folio'])) ?>"
+                             target="_blank"
+                             class="btn btn-xs btn-outline-success"
+                             title="Reimprimir comprobante">
+                            <i class="fas fa-print"></i>
+                          </a>
+                          <?php endif; ?>
+                        </div>
+                        <small class="text-muted" style="font-size:.6rem; word-break:break-all">
+                          <?= esc($m['folio'] ?? '') ?>
+                        </small>
+                      </div>
+                    <?php else: ?>
+                      <span class="badge badge-secondary mt-1" style="font-size:.65rem">Pendiente de pago</span>
                     <?php endif; ?>
                   </div>
                 </div>
               </div>
-            <?php endforeach; ?>
-          </div>
+              <?php endforeach; ?>
+            </div>
+            <div class="mt-2 pt-2 border-top d-flex flex-wrap align-items-center" style="gap:.4rem">
+              <span class="badge badge-success p-2">
+                <i class="fas fa-check-circle mr-1"></i>Pagada
+              </span>
+              <span class="badge badge-secondary p-2">
+                <i class="fas fa-clock mr-1"></i>Pendiente
+              </span>
+            </div>
+            <?php endif; ?>
 
-          <div class="mt-3 pt-3 border-top d-flex flex-wrap align-items-center" style="gap:.4rem">
-            <span class="badge badge-success p-2">
-              <i class="fas fa-check-circle mr-1"></i>Pagado
-            </span>
-            <span class="badge badge-danger p-2">
-              <i class="fas fa-times-circle mr-1"></i>Pendiente
-            </span>
-            <span class="badge badge-secondary p-2">
-              <i class="fas fa-clock mr-1"></i>Próximo
-            </span>
-            <span class="badge badge-light border p-2 text-muted"
-                  title="Meses anteriores al inicio del ciclo o al primer pago registrado. No se consideran adeudos.">
-              <i class="fas fa-minus mr-1"></i>Sin registro / No aplica
-            </span>
-            <small class="text-muted ml-1">
-              <i class="fas fa-info-circle mr-1"></i>Los meses grises no generan adeudo.
-            </small>
-          </div>
+          <?php else: ?>
+
+            <!-- ── Calendario de Mensualidades (Licenciatura / Prepa) ── -->
+            <?php if (! empty($anios)): ?>
+            <div class="mb-4">
+              <label class="text-muted text-uppercase font-weight-bold" style="font-size:.75rem">Año consultado</label>
+              <div class="d-flex flex-wrap">
+                <?php foreach ($anios as $y): ?>
+                  <a href="?num_control=<?= urlencode($num_control) ?>&nivel=<?= urlencode($nivel) ?>&anio=<?= $y ?>"
+                     class="btn btn-sm <?= $y == $anio ? 'btn-primary' : 'btn-outline-secondary' ?> mr-1 mb-1">
+                    <?= $y ?>
+                  </a>
+                <?php endforeach; ?>
+              </div>
+            </div>
+            <?php endif; ?>
+
+            <?php if ($directa_anio): ?>
+            <div class="callout callout-info mb-3">
+              <i class="fas fa-info-circle mr-2"></i>
+              <strong>Ciclo <?= $anio ?> iniciado mediante mensualidad directa.</strong>
+              No se encontró inscripción ni reinscripción para este año.
+              Los meses anteriores al primer pago registrado se muestran en gris
+              (<i class="fas fa-minus"></i>) y <strong>no se contabilizan como adeudos</strong>,
+              ya que podrían haberse liquidado fuera del sistema.
+            </div>
+            <?php endif; ?>
+
+            <div class="row">
+              <?php foreach ($estado as $e): ?>
+                <?php
+                  switch ($e['status']) {
+                      case 'pagado':
+                          $cardClass = 'bg-success text-white';
+                          $icon      = '<i class="fas fa-check-circle fa-2x"></i>';
+                          break;
+                      case 'pendiente':
+                          $cardClass = 'bg-danger text-white';
+                          $icon      = '<i class="fas fa-times-circle fa-2x"></i>';
+                          break;
+                      case 'na':
+                          $cardClass = 'bg-white text-muted border';
+                          $icon      = '<i class="fas fa-minus fa-2x text-muted" style="opacity:.35"></i>';
+                          break;
+                      default:
+                          $cardClass = 'bg-light text-muted';
+                          $icon      = '<i class="fas fa-clock fa-2x text-muted"></i>';
+                  }
+                ?>
+                <div class="col-md-2 col-sm-3 col-4 mb-3">
+                  <div class="card mb-0 shadow-sm <?= $cardClass ?>" style="border-radius:8px">
+                    <div class="card-body text-center py-3 px-2">
+                      <p class="mb-2 font-weight-bold" style="font-size:.85rem; letter-spacing:.03rem">
+                        <?= $e['nombre'] ?>
+                      </p>
+                      <?= $icon ?>
+                      <?php if ($e['status'] === 'pagado' && ! empty($e['folio_digital'])): ?>
+                      <div class="mt-2">
+                        <a href="<?= base_url('pagos/comprobante/' . urlencode($e['folio_digital'])) ?>"
+                           target="_blank"
+                           class="btn btn-xs btn-light text-dark"
+                           title="Reimprimir comprobante">
+                          <i class="fas fa-print"></i>
+                        </a>
+                      </div>
+                      <?php endif; ?>
+                    </div>
+                  </div>
+                </div>
+              <?php endforeach; ?>
+            </div>
+
+            <div class="mt-3 pt-3 border-top d-flex flex-wrap align-items-center" style="gap:.4rem">
+              <span class="badge badge-success p-2">
+                <i class="fas fa-check-circle mr-1"></i>Pagado
+              </span>
+              <span class="badge badge-danger p-2">
+                <i class="fas fa-times-circle mr-1"></i>Pendiente
+              </span>
+              <span class="badge badge-secondary p-2">
+                <i class="fas fa-clock mr-1"></i>Próximo
+              </span>
+              <span class="badge badge-light border p-2 text-muted"
+                    title="Meses anteriores al inicio del ciclo o al primer pago registrado. No se consideran adeudos.">
+                <i class="fas fa-minus mr-1"></i>Sin registro / No aplica
+              </span>
+              <small class="text-muted ml-1">
+                <i class="fas fa-info-circle mr-1"></i>Los meses grises no generan adeudo.
+              </small>
+            </div>
+
+          <?php endif; ?>
 
         </div>
       </div>
@@ -438,11 +527,17 @@
             </div>
             <div class="col-md-3 col-sm-6 mb-3">
               <div class="info-box bg-primary shadow-sm">
-                <span class="info-box-icon"><i class="fas fa-calendar-check"></i></span>
+                <span class="info-box-icon">
+                  <i class="fas <?= $es_posgrado ? 'fa-book-open' : 'fa-calendar-check' ?>"></i>
+                </span>
                 <div class="info-box-content">
-                  <span class="info-box-text">Mensualidades</span>
+                  <span class="info-box-text"><?= $es_posgrado ? 'Materias' : 'Mensualidades' ?></span>
                   <span class="info-box-number">$<?= number_format($totales['mensualidades'], 2) ?></span>
-                  <span class="progress-description"><?= $totales['mensualidades_cnt'] ?> mes(es) pagado(s)</span>
+                  <?php if ($es_posgrado): ?>
+                    <span class="progress-description"><?= $pagados ?> materia(s) pagada(s)</span>
+                  <?php else: ?>
+                    <span class="progress-description"><?= $totales['mensualidades_cnt'] ?> mes(es) pagado(s)</span>
+                  <?php endif; ?>
                 </div>
               </div>
             </div>
@@ -464,11 +559,15 @@
                   <span class="info-box-number">$<?= number_format($totales['total'], 2) ?></span>
                   <?php if ($pendientes > 0): ?>
                   <span class="progress-description" style="color:#ffc107">
-                    <i class="fas fa-exclamation-triangle mr-1"></i><?= $pendientes ?> mes(es) sin pagar en <?= $anio ?>
+                    <i class="fas fa-exclamation-triangle mr-1"></i>
+                    <?= $es_posgrado
+                        ? $pendientes . ' materia(s) sin pagar'
+                        : $pendientes . ' mes(es) sin pagar en ' . $anio ?>
                   </span>
                   <?php else: ?>
                   <span class="progress-description" style="color:#28a745">
-                    <i class="fas fa-check mr-1"></i>Al corriente en <?= $anio ?>
+                    <i class="fas fa-check mr-1"></i>
+                    <?= $es_posgrado ? 'Materias al corriente' : 'Al corriente en ' . $anio ?>
                   </span>
                   <?php endif; ?>
                 </div>
