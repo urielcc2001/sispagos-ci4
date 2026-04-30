@@ -407,25 +407,64 @@ class AdminController extends BaseController
         $anio       = (int) ($this->request->getGet('anio') ?? date('Y'));
 
         $data = [
-            'num_control'   => $numControl,
-            'nivel'         => $nivel,
-            'anio'          => $anio,
-            'estado'        => [],
-            'info_alumno'   => null,
-            'anios'         => [],
-            'inscripciones' => [],
-            'pagos_otros'   => [],
-            'totales'       => null,
+            'num_control'    => $numControl,
+            'nivel'          => $nivel,
+            'anio'           => $anio,
+            'estado'         => [],
+            'info_alumno'    => null,
+            'anios'          => [],
+            'inscripciones'  => [],
+            'pagos_otros'    => [],
+            'totales'        => null,
+            'directa_anio'   => false,
+            'periodo_actual' => null,
         ];
 
         if ($numControl && $nivel) {
-            $model                 = new \App\Models\AdeudoModel();
-            $data['estado']        = $model->getEstadoCuentaMensual($numControl, $nivel, $anio);
-            $data['info_alumno']   = $model->getInfoAlumno($numControl, $nivel);
-            $data['anios']         = $model->getAniosConPagos($numControl, $nivel);
-            $data['inscripciones'] = $model->getInscripciones($numControl, $nivel);
-            $data['pagos_otros']   = $model->getPagosOtros($numControl, $nivel);
-            $data['totales']       = $model->getTotalesPagado($numControl, $nivel);
+            $model                  = new \App\Models\AdeudoModel();
+            $data['estado']         = $model->getEstadoCuentaMensual($numControl, $nivel, $anio);
+            $data['info_alumno']    = $model->getInfoAlumno($numControl, $nivel);
+            $data['anios']          = $model->getAniosConPagos($numControl, $nivel);
+            $data['inscripciones']  = $model->getInscripciones($numControl, $nivel);
+            $data['pagos_otros']    = $model->getPagosOtros($numControl, $nivel);
+            $data['totales']        = $model->getTotalesPagado($numControl, $nivel);
+
+            // Ancla del año seleccionado → modo directa
+            $anclaAnio = $model->getAnclaParaAnio($numControl, $nivel, $anio);
+            $data['directa_anio'] = $anclaAnio['directa'];
+
+            // Periodo actual: ancla del año en curso para el encabezado
+            $anclaHoy = ($anio === (int) date('Y'))
+                ? $anclaAnio
+                : $model->getAnclaParaAnio($numControl, $nivel, (int) date('Y'));
+
+            if (! $anclaHoy['directa'] && $anclaHoy['pago'] !== null) {
+                $pHoy = $anclaHoy['pago'];
+                $num  = ! empty($pHoy['periodo_pago']) ? (int) $pHoy['periodo_pago'] : null;
+                $plan = $pHoy['detalle_tramite'] ?? '';
+
+                if ($num) {
+                    if ($plan === 'Semestral') {
+                        $rango = ($num % 2 !== 0) ? 'Ago – Dic' : 'Feb – Jul';
+                        $data['periodo_actual'] = 'Semestre ' . $num . ' (' . $rango . ')';
+                    } elseif ($nivel === 'uni' || $plan === 'Cuatrimestral') {
+                        $mod   = $num % 3;
+                        $rango = $mod === 1 ? 'Ene – Abr' : ($mod === 2 ? 'May – Ago' : 'Sep – Dic');
+                        $data['periodo_actual'] = 'Cuatrimestre ' . $num . ' (' . $rango . ')';
+                    } else {
+                        $data['periodo_actual'] = 'Periodo ' . $num;
+                        if (! empty($pHoy['tipo_periodo'])) {
+                            $data['periodo_actual'] .= ' — ' . $pHoy['tipo_periodo'];
+                        }
+                    }
+                } else {
+                    // Fallback por mes si el pago no tiene periodo_pago
+                    $m = $anclaHoy['mes'];
+                    $data['periodo_actual'] = $m <= 4
+                        ? 'Cuatrimestre 1 (Ene – Abr)'
+                        : ($m <= 8 ? 'Cuatrimestre 2 (May – Ago)' : 'Cuatrimestre 3 (Sep – Dic)');
+                }
+            }
         }
 
         return view('admin/estado_cuenta', $data);

@@ -54,9 +54,16 @@
               <div class="form-group mb-0">
                 <label>Año</label>
                 <select name="anio" class="form-control">
-                  <?php for ($y = (int) date('Y'); $y >= (int) date('Y') - 4; $y--): ?>
+                  <?php
+                    // Rango dinámico: si ya se consultó un alumno, usar sus años reales;
+                    // si no, mostrar los últimos 5 años como default.
+                    $opcionesAnio = ! empty($anios)
+                        ? $anios
+                        : array_map('strval', range((int) date('Y'), (int) date('Y') - 4));
+                  ?>
+                  <?php foreach ($opcionesAnio as $y): ?>
                     <option value="<?= $y ?>" <?= $anio == $y ? 'selected' : '' ?>><?= $y ?></option>
-                  <?php endfor; ?>
+                  <?php endforeach; ?>
                 </select>
               </div>
             </div>
@@ -93,6 +100,11 @@
           </h3>
           <div class="card-tools">
             <span class="badge badge-info p-2 mr-1"><?= esc($nivelLabels[$nivel] ?? $nivel) ?></span>
+            <?php if ($periodo_actual): ?>
+              <span class="badge badge-secondary p-2 mr-1">
+                <i class="fas fa-layer-group mr-1"></i><?= esc($periodo_actual) ?>
+              </span>
+            <?php endif; ?>
             <?php if ($totales): ?>
               <span class="badge badge-dark p-2 mr-1">
                 <i class="fas fa-dollar-sign mr-1"></i>Total histórico: $<?= number_format($totales['total'], 2) ?>
@@ -154,12 +166,35 @@
             <tbody>
               <?php foreach ($inscripciones as $p): ?>
               <?php
-                $mesRef = ! empty($p['mes_inicio_ciclo'])
-                          ? (int) $p['mes_inicio_ciclo']
-                          : (int) date('n', strtotime($p['created_at']));
-                if ($mesRef <= 4)     $periodoLabel = 'Cuatrimestre 1 (Ene – Abr)';
-                elseif ($mesRef <= 8) $periodoLabel = 'Cuatrimestre 2 (May – Ago)';
-                else                  $periodoLabel = 'Cuatrimestre 3 (Sep – Dic)';
+                $num    = ! empty($p['periodo_pago']) ? (int) $p['periodo_pago'] : null;
+                $plan   = $p['detalle_tramite'] ?? '';
+                $nivelP = $p['nivel'] ?? '';
+
+                if ($num) {
+                    if ($plan === 'Semestral') {
+                        $rango        = ($num % 2 !== 0) ? 'Ago – Dic' : 'Feb – Jul';
+                        $periodoLabel = 'Semestre ' . $num . ' (' . $rango . ')';
+                    } elseif ($nivelP === 'uni' || $plan === 'Cuatrimestral') {
+                        $mod          = $num % 3;
+                        if ($mod === 1)     $rango = 'Ene – Abr';
+                        elseif ($mod === 2) $rango = 'May – Ago';
+                        else                $rango = 'Sep – Dic';
+                        $periodoLabel = 'Cuatrimestre ' . $num . ' (' . $rango . ')';
+                    } else {
+                        $periodoLabel = 'Periodo ' . $num;
+                        if (! empty($p['tipo_periodo'])) {
+                            $periodoLabel .= ' — ' . $p['tipo_periodo'];
+                        }
+                    }
+                } else {
+                    // Fallback cuando no hay periodo_pago registrado
+                    $mesRef = ! empty($p['mes_inicio_ciclo'])
+                              ? (int) $p['mes_inicio_ciclo']
+                              : (int) date('n', strtotime($p['created_at']));
+                    if ($mesRef <= 4)     $periodoLabel = 'Cuatrimestre 1 (Ene – Abr)';
+                    elseif ($mesRef <= 8) $periodoLabel = 'Cuatrimestre 2 (May – Ago)';
+                    else                  $periodoLabel = 'Cuatrimestre 3 (Sep – Dic)';
+                }
               ?>
               <tr>
                 <td>
@@ -245,6 +280,17 @@
           </div>
           <?php endif; ?>
 
+          <?php if ($directa_anio): ?>
+          <div class="callout callout-info mb-3">
+            <i class="fas fa-info-circle mr-2"></i>
+            <strong>Ciclo <?= $anio ?> iniciado mediante mensualidad directa.</strong>
+            No se encontró inscripción ni reinscripción para este año.
+            Los meses anteriores al primer pago registrado se muestran en gris
+            (<i class="fas fa-minus"></i>) y <strong>no se contabilizan como adeudos</strong>,
+            ya que podrían haberse liquidado fuera del sistema.
+          </div>
+          <?php endif; ?>
+
           <div class="row">
             <?php foreach ($estado as $e): ?>
               <?php
@@ -289,19 +335,23 @@
             <?php endforeach; ?>
           </div>
 
-          <div class="mt-3 pt-3 border-top">
-            <span class="badge badge-success p-2 mr-2">
+          <div class="mt-3 pt-3 border-top d-flex flex-wrap align-items-center" style="gap:.4rem">
+            <span class="badge badge-success p-2">
               <i class="fas fa-check-circle mr-1"></i>Pagado
             </span>
-            <span class="badge badge-danger p-2 mr-2">
+            <span class="badge badge-danger p-2">
               <i class="fas fa-times-circle mr-1"></i>Pendiente
             </span>
-            <span class="badge badge-secondary p-2 mr-2">
+            <span class="badge badge-secondary p-2">
               <i class="fas fa-clock mr-1"></i>Próximo
             </span>
-            <span class="badge badge-light border p-2 text-muted">
-              <i class="fas fa-minus mr-1"></i>Antes de inscripción
+            <span class="badge badge-light border p-2 text-muted"
+                  title="Meses anteriores al inicio del ciclo o al primer pago registrado. No se consideran adeudos.">
+              <i class="fas fa-minus mr-1"></i>Sin registro / No aplica
             </span>
+            <small class="text-muted ml-1">
+              <i class="fas fa-info-circle mr-1"></i>Los meses grises no generan adeudo.
+            </small>
           </div>
 
         </div>

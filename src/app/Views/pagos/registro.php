@@ -505,6 +505,7 @@ $(function () {
   $('#form-pago').on('reset', function () {
     setTimeout(function () {
       resetAlumnoFields();
+      $('#aviso-mensualidad-directa').remove();
       $('#grupo-modalidad-sel, #grupo-modalidad-prepa, #grupo-carrera, #grupo-modalidad-txt, #grupo-tramite').hide();
       $('#grupo-dinamico, #grupo-tipo-periodo, #grupo-bach-tipo, #grupo-selector-periodo, #grupo-materia-posgrado, #grupo-meses-mensualidad').hide();
       $('#nombre_alumno').prop('readonly', true).removeClass('is-valid is-invalid');
@@ -701,9 +702,13 @@ $(function () {
 
     $.get(BASE_URL + 'pagos/estado-mensualidades', { num_control: numControl, nivel: nivel })
       .done(function (res) {
+        $('#aviso-mensualidad-directa').remove();
         if (!res.meses || res.meses.length === 0) {
-          $grid.html('<span class="text-warning small"><i class="fas fa-exclamation-triangle mr-1"></i> El alumno no tiene inscripción registrada.</span>');
+          $grid.html('<span class="text-warning small"><i class="fas fa-exclamation-triangle mr-1"></i> No se pudo cargar el estado de los meses.</span>');
           return;
+        }
+        if (res.directa) {
+          $grid.before('<div id="aviso-mensualidad-directa" class="alert alert-info py-2 px-3 mb-2 small"><i class="fas fa-info-circle mr-1"></i> No se detecta pago inicial de ciclo. Se procederá al cobro de mensualidad directa.</div>');
         }
         renderizarMesesGrid(res.meses);
       })
@@ -722,6 +727,11 @@ $(function () {
       if (m.status === 'pagado') {
         cls      = 'btn btn-success btn-sm mr-1 mb-1';
         icon     = '<i class="fas fa-check mr-1"></i>';
+        disabled = true;
+        original = null;
+      } else if (m.status === 'na') {
+        cls      = 'btn btn-outline-secondary btn-sm mr-1 mb-1';
+        icon     = '<i class="fas fa-minus mr-1"></i>';
         disabled = true;
         original = null;
       } else if (m.status === 'pendiente') {
@@ -826,6 +836,12 @@ $(function () {
         $('#label-selector-periodo').html('Periodo <span class="text-danger">*</span>');
         generarBotonesGrid(2, 10, 'num');
       }
+
+      const mesActualR = new Date().getMonth() + 1;
+      $('#sel-mes-inicio').val(mesActualR);
+      $('#mes_inicio_ciclo_val').val(mesActualR);
+      $('#grupo-mes-inicio').show();
+
       $('#grupo-selector-periodo').show();
       sugerirPeriodo();
     }

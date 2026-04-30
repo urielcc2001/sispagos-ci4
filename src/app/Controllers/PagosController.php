@@ -47,14 +47,18 @@ class PagosController extends BaseController
         $nivel      = $this->request->getGet('nivel') ?? '';
 
         if (! $numControl || ! $nivel || $nivel === 'posgrado') {
-            return $this->response->setJSON(['meses' => []]);
+            return $this->response->setJSON(['meses' => [], 'directa' => false]);
         }
 
-        $model = new \App\Models\AdeudoModel();
-        $anio  = (int) date('Y');
-        $meses = $model->getEstadoCuentaMensual($numControl, $nivel, $anio);
+        $model  = new \App\Models\AdeudoModel();
+        $result = $model->getEstadoMensualParaCobro($numControl, $nivel);
 
-        return $this->response->setJSON(['meses' => $meses, 'anio' => $anio]);
+        return $this->response->setJSON([
+            'meses'     => $result['meses'],
+            'anio'      => (int) date('Y'),
+            'directa'   => $result['directa'],
+            'mes_ancla' => $result['mes_ancla'],
+        ]);
     }
 
     public function tramitesDisponibles()
@@ -252,7 +256,7 @@ class PagosController extends BaseController
             'id_cajero'       => service('session')->get('id_usuario'),
             'metodo_pago'      => $this->request->getPost('metodo_pago') ?: 'Efectivo',
             'observaciones'    => $this->request->getPost('observaciones') ?: null,
-            'mes_inicio_ciclo' => $concepto === 'inscripcion'
+            'mes_inicio_ciclo' => in_array($concepto, ['inscripcion', 'reinscripcion'])
                                   ? ($this->request->getPost('mes_inicio_ciclo') ?: null)
                                   : null,
         ];
@@ -433,47 +437,45 @@ class PagosController extends BaseController
         }
 
         if ($concepto === 'reinscripcion') {
-            $tieneInscripcion = $db->table('pagos')
-                ->where('num_control', $numControl)
-                ->where('nivel', $nivel)
-                ->where('concepto', 'inscripcion')
-                ->countAllResults();
-            if ($tieneInscripcion === 0) {
-                return 'El alumno no tiene inscripción previa. Registra la inscripción primero.';
-            }
-
-            $periodo = (int) $periodoNum;
-            if ($periodo > 2) {
-                $previo = $db->table('pagos')
-                    ->where('num_control', $numControl)
-                    ->where('nivel', $nivel)
-                    ->where('concepto', 'reinscripcion')
-                    ->where('periodo_pago', $periodo - 1)
-                    ->countAllResults();
-                if ($previo === 0) {
-                    return 'Error: Falta el pago de Reinscripción del Período ' . ($periodo - 1) . '.';
-                }
-            }
+            // Sin validación de inscripción previa: permite alumnos avanzados o de transferencia.
+            // Sin validación de secuencia de periodos: el cajero selecciona el periodo correcto.
         }
 
         if ($concepto === 'mensualidad') {
-            $inscripcion = $db->table('pagos')
+            $anioActual = (int) date('Y');
+
+            // Reinscripción del año vigente (ancla prioritaria)
+            $pagoInicial = $db->table('pagos')
                 ->where('num_control', $numControl)
                 ->where('nivel', $nivel)
-                ->where('concepto', 'inscripcion')
-                ->orderBy('id', 'ASC')
+                ->where('concepto', 'reinscripcion')
+                ->where('YEAR(created_at)', $anioActual)
+                ->orderBy('id', 'DESC')
                 ->limit(1)
                 ->get()->getRowArray();
 
-            if (! $inscripcion) {
-                return 'El alumno no tiene inscripción registrada. No se puede cobrar mensualidad.';
+            // Inscripción del año vigente (respaldo)
+            if (! $pagoInicial) {
+                $pagoInicial = $db->table('pagos')
+                    ->where('num_control', $numControl)
+                    ->where('nivel', $nivel)
+                    ->where('concepto', 'inscripcion')
+                    ->where('YEAR(created_at)', $anioActual)
+                    ->orderBy('id', 'ASC')
+                    ->limit(1)
+                    ->get()->getRowArray();
+            }
+
+            // Sin pago inicial del ciclo vigente → mensualidad directa (permitida sin ancla)
+            if (! $pagoInicial) {
+                return null;
             }
 
             if ($fechaPagoReal) {
-                $mesReal  = (int) date('n', strtotime($inscripcion['created_at']));
-                $anioRef  = (int) date('Y', strtotime($inscripcion['created_at']));
-                $mesAncla = ! empty($inscripcion['mes_inicio_ciclo'])
-                            ? (int) $inscripcion['mes_inicio_ciclo']
+                $mesReal  = (int) date('n', strtotime($pagoInicial['created_at']));
+                $anioRef  = (int) date('Y', strtotime($pagoInicial['created_at']));
+                $mesAncla = ! empty($pagoInicial['mes_inicio_ciclo'])
+                            ? (int) $pagoInicial['mes_inicio_ciclo']
                             : $mesReal;
                 if ($mesAncla > $mesReal) {
                     $anioRef--;

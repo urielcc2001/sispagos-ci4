@@ -43,6 +43,48 @@ class AdeudoModel
         return ['anio' => $anio, 'mes' => $mes];
     }
 
+    // ── Ancla por año específico: reinscripción del año → inscripción del año → directa ─
+
+    public function getAnclaParaAnio(string $numControl, string $nivel, int $anio): array
+    {
+        $db = \Config\Database::connect();
+
+        $pago = $db->table('pagos')
+            ->where('num_control', $numControl)
+            ->where('nivel', $nivel)
+            ->where('concepto', 'reinscripcion')
+            ->where('YEAR(created_at)', $anio)
+            ->orderBy('id', 'DESC')
+            ->limit(1)
+            ->get()->getRowArray();
+
+        if (! $pago) {
+            $pago = $db->table('pagos')
+                ->where('num_control', $numControl)
+                ->where('nivel', $nivel)
+                ->where('concepto', 'inscripcion')
+                ->where('YEAR(created_at)', $anio)
+                ->orderBy('id', 'ASC')
+                ->limit(1)
+                ->get()->getRowArray();
+        }
+
+        if (! $pago) {
+            return ['directa' => true, 'mes' => null, 'anio' => $anio, 'pago' => null];
+        }
+
+        $mesReal   = (int) date('n', strtotime($pago['created_at']));
+        $anioAncla = (int) date('Y', strtotime($pago['created_at']));
+        $mesAncla  = ! empty($pago['mes_inicio_ciclo'])
+                     ? (int) $pago['mes_inicio_ciclo']
+                     : $mesReal;
+        if ($mesAncla > $mesReal) {
+            $anioAncla--;
+        }
+
+        return ['directa' => false, 'mes' => $mesAncla, 'anio' => $anioAncla, 'pago' => $pago];
+    }
+
     // ── Mensualidades pagadas (como claves "YYYY-MM") ────────────────
 
     public function getPagadosYearMonth(string $numControl, string $nivel): array
@@ -86,27 +128,61 @@ class AdeudoModel
     }
 
     // ── Estado de cuenta: 12 meses de un año con status ─────────────
-    //   'pagado' | 'pendiente' | 'futuro' | 'na' (antes de inscripción)
+    //   'pagado' | 'pendiente' | 'futuro' | 'na' (fuera del ciclo o sin historial)
 
     public function getEstadoCuentaMensual(string $numControl, string $nivel, int $anio): array
     {
         $pagadosData = $this->getPagadosData($numControl, $nivel);
-        $inscripcion = $this->getInscripcion($numControl, $nivel);
         $anioHoy     = (int) date('Y');
         $mesHoy      = (int) date('n');
 
-        $ancla    = $inscripcion ? $this->getAnclaInscripcion($inscripcion) : null;
-        $inscAnio = $ancla['anio'] ?? null;
-        $inscMes  = $ancla['mes']  ?? null;
+        // Ancla específica del año consultado (reinscripción → inscripción → directa)
+        $ancla    = $this->getAnclaParaAnio($numControl, $nivel, $anio);
+        $directa  = $ancla['directa'];
+        $inscAnio = $ancla['anio'];
+        $inscMes  = $ancla['mes'];
+
+        // Modo directa: ancla dinámica = primer mes con pago registrado ese año.
+        // Meses anteriores a ese primer pago → 'na' (no sabemos si se liquidaron fuera del sistema).
+        // Si no hay ningún pago ese año → todo el pasado es 'na' (sin deuda confirmada).
+        $primerMesPagado = null;
+        if ($directa) {
+            foreach ($pagadosData as $key => $_) {
+                [$anioKey, $mesKey] = explode('-', $key);
+                if ((int) $anioKey === $anio) {
+                    $mesNum = (int) $mesKey;
+                    if ($primerMesPagado === null || $mesNum < $primerMesPagado) {
+                        $primerMesPagado = $mesNum;
+                    }
+                }
+            }
+        }
 
         $estado = [];
         for ($mes = 1; $mes <= 12; $mes++) {
-            // Meses anteriores al inicio del ciclo → no aplica
-            if ($inscAnio !== null) {
-                if ($anio < $inscAnio || ($anio === $inscAnio && $mes < $inscMes)) {
-                    $estado[] = ['mes' => $mes, 'nombre' => self::$meses[$mes], 'status' => 'na', 'folio_digital' => null];
-                    continue;
-                }
+
+            // Modo con ancla: meses anteriores al inicio del ciclo → na
+            if (! $directa && ($anio < $inscAnio || ($anio === $inscAnio && $inscMes !== null && $mes < $inscMes))) {
+                $estado[] = ['mes' => $mes, 'nombre' => self::$meses[$mes], 'status' => 'na', 'folio_digital' => null];
+                continue;
+            }
+
+            // Modo directa: meses antes del primer pago del año → na
+            if ($directa && $primerMesPagado !== null && $mes < $primerMesPagado) {
+                $estado[] = ['mes' => $mes, 'nombre' => self::$meses[$mes], 'status' => 'na', 'folio_digital' => null];
+                continue;
+            }
+
+            // Modo directa sin ningún pago ese año → pasado = na, futuro = futuro
+            if ($directa && $primerMesPagado === null) {
+                $esPasado = ($anio < $anioHoy) || ($anio === $anioHoy && $mes <= $mesHoy);
+                $estado[] = [
+                    'mes'           => $mes,
+                    'nombre'        => self::$meses[$mes],
+                    'status'        => $esPasado ? 'na' : 'futuro',
+                    'folio_digital' => null,
+                ];
+                continue;
             }
 
             $key = $anio . '-' . str_pad($mes, 2, '0', STR_PAD_LEFT);
@@ -167,12 +243,25 @@ class AdeudoModel
     }
 
     // ── Años disponibles en el selector de estado de cuenta ──────────
+    //   Incluye años con cualquier pago, aunque no haya inscripción formal.
 
     public function getAniosConPagos(string $numControl, string $nivel): array
     {
+        $db      = \Config\Database::connect();
+        $anioHoy = (int) date('Y');
+
         $inscripcion = $this->getInscripcion($numControl, $nivel);
-        $anioHoy     = (int) date('Y');
         $anioInicio  = $inscripcion ? $this->getAnclaInscripcion($inscripcion)['anio'] : $anioHoy;
+
+        $minPago = $db->table('pagos')
+            ->select('MIN(YEAR(created_at)) AS min_anio')
+            ->where('num_control', $numControl)
+            ->where('nivel', $nivel)
+            ->get()->getRowArray()['min_anio'];
+
+        if ($minPago) {
+            $anioInicio = min($anioInicio, (int) $minPago);
+        }
 
         $anios = [];
         for ($y = $anioHoy; $y >= $anioInicio; $y--) {
@@ -262,6 +351,95 @@ class AdeudoModel
             'mensualidades_cnt'  => $cMens,
             'otros'              => $tOtros,
             'total'              => $tInsc + $tMens + $tOtros,
+        ];
+    }
+
+    // ── Estado de meses para ventanilla de cobro (año actual) ──────────
+    //   Ancla: reinscripción del año vigente → inscripción del año vigente → modo directo.
+
+    public function getEstadoMensualParaCobro(string $numControl, string $nivel): array
+    {
+        $anio   = (int) date('Y');
+        $mesHoy = (int) date('n');
+        $db     = \Config\Database::connect();
+
+        // 1. Reinscripción del año vigente (ancla más específica)
+        $pagoInicial = $db->table('pagos')
+            ->where('num_control', $numControl)
+            ->where('nivel', $nivel)
+            ->where('concepto', 'reinscripcion')
+            ->where('YEAR(created_at)', $anio)
+            ->orderBy('id', 'DESC')
+            ->limit(1)
+            ->get()->getRowArray();
+
+        // 2. Inscripción del año vigente (respaldo)
+        if (! $pagoInicial) {
+            $pagoInicial = $db->table('pagos')
+                ->where('num_control', $numControl)
+                ->where('nivel', $nivel)
+                ->where('concepto', 'inscripcion')
+                ->where('YEAR(created_at)', $anio)
+                ->orderBy('id', 'ASC')
+                ->limit(1)
+                ->get()->getRowArray();
+        }
+
+        $directa   = ! $pagoInicial;
+        $mesAncla  = null;
+        $anioAncla = $anio;
+
+        if (! $directa) {
+            $mesReal   = (int) date('n', strtotime($pagoInicial['created_at']));
+            $anioAncla = (int) date('Y', strtotime($pagoInicial['created_at']));
+            $mesAncla  = ! empty($pagoInicial['mes_inicio_ciclo'])
+                         ? (int) $pagoInicial['mes_inicio_ciclo']
+                         : $mesReal;
+            if ($mesAncla > $mesReal) {
+                $anioAncla--;
+            }
+        }
+
+        $pagadosData = $this->getPagadosData($numControl, $nivel);
+        $meses       = [];
+
+        for ($mes = 1; $mes <= 12; $mes++) {
+            // Meses anteriores al ancla → no aplica para este ciclo
+            if (! $directa && ($anio < $anioAncla || ($anio === $anioAncla && $mesAncla !== null && $mes < $mesAncla))) {
+                $meses[] = [
+                    'mes'           => $mes,
+                    'nombre'        => self::$meses[$mes],
+                    'status'        => 'na',
+                    'folio_digital' => null,
+                ];
+                continue;
+            }
+
+            $key = $anio . '-' . str_pad($mes, 2, '0', STR_PAD_LEFT);
+
+            if (isset($pagadosData[$key])) {
+                $status = 'pagado';
+                $folio  = $pagadosData[$key];
+            } elseif ($mes <= $mesHoy) {
+                $status = 'pendiente';
+                $folio  = null;
+            } else {
+                $status = 'futuro';
+                $folio  = null;
+            }
+
+            $meses[] = [
+                'mes'           => $mes,
+                'nombre'        => self::$meses[$mes],
+                'status'        => $status,
+                'folio_digital' => $folio,
+            ];
+        }
+
+        return [
+            'meses'     => $meses,
+            'directa'   => $directa,
+            'mes_ancla' => $mesAncla,
         ];
     }
 
