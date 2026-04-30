@@ -63,12 +63,34 @@ class AdeudoModel
         );
     }
 
+    // ── Mensualidades pagadas con folio (mapa "YYYY-MM" → folio_digital) ─
+
+    private function getPagadosData(string $numControl, string $nivel): array
+    {
+        $db   = \Config\Database::connect();
+        $rows = $db->table('pagos')
+            ->select('folio_digital, YEAR(fecha_pago_real) AS anio, periodo_pago AS mes')
+            ->where('num_control', $numControl)
+            ->where('nivel', $nivel)
+            ->where('concepto', 'mensualidad')
+            ->where('fecha_pago_real IS NOT NULL', null, false)
+            ->get()
+            ->getResultArray();
+
+        $map = [];
+        foreach ($rows as $r) {
+            $key        = $r['anio'] . '-' . str_pad($r['mes'], 2, '0', STR_PAD_LEFT);
+            $map[$key]  = $r['folio_digital'];
+        }
+        return $map;
+    }
+
     // ── Estado de cuenta: 12 meses de un año con status ─────────────
     //   'pagado' | 'pendiente' | 'futuro' | 'na' (antes de inscripción)
 
     public function getEstadoCuentaMensual(string $numControl, string $nivel, int $anio): array
     {
-        $pagados     = $this->getPagadosYearMonth($numControl, $nivel);
+        $pagadosData = $this->getPagadosData($numControl, $nivel);
         $inscripcion = $this->getInscripcion($numControl, $nivel);
         $anioHoy     = (int) date('Y');
         $mesHoy      = (int) date('n');
@@ -82,22 +104,25 @@ class AdeudoModel
             // Meses anteriores al inicio del ciclo → no aplica
             if ($inscAnio !== null) {
                 if ($anio < $inscAnio || ($anio === $inscAnio && $mes < $inscMes)) {
-                    $estado[] = ['mes' => $mes, 'nombre' => self::$meses[$mes], 'status' => 'na'];
+                    $estado[] = ['mes' => $mes, 'nombre' => self::$meses[$mes], 'status' => 'na', 'folio_digital' => null];
                     continue;
                 }
             }
 
             $key = $anio . '-' . str_pad($mes, 2, '0', STR_PAD_LEFT);
 
-            if (in_array($key, $pagados, true)) {
-                $status = 'pagado';
+            if (isset($pagadosData[$key])) {
+                $status       = 'pagado';
+                $folioDigital = $pagadosData[$key];
             } elseif ($anio < $anioHoy || ($anio === $anioHoy && $mes <= $mesHoy)) {
-                $status = 'pendiente';
+                $status       = 'pendiente';
+                $folioDigital = null;
             } else {
-                $status = 'futuro';
+                $status       = 'futuro';
+                $folioDigital = null;
             }
 
-            $estado[] = ['mes' => $mes, 'nombre' => self::$meses[$mes], 'status' => $status];
+            $estado[] = ['mes' => $mes, 'nombre' => self::$meses[$mes], 'status' => $status, 'folio_digital' => $folioDigital];
         }
 
         return $estado;
@@ -170,6 +195,74 @@ class AdeudoModel
             ->limit(1)
             ->get()
             ->getRowArray() ?: null;
+    }
+
+    // ── Inscripciones / Reinscripciones del alumno ──────────────────
+
+    public function getInscripciones(string $numControl, string $nivel): array
+    {
+        $db = \Config\Database::connect();
+        return $db->table('pagos')
+            ->where('num_control', $numControl)
+            ->where('nivel', $nivel)
+            ->whereIn('concepto', ['inscripcion', 'reinscripcion'])
+            ->orderBy('created_at', 'ASC')
+            ->get()->getResultArray();
+    }
+
+    // ── Pagos que no son mensualidad ni inscripción (trámites, etc.) ─
+
+    public function getPagosOtros(string $numControl, string $nivel): array
+    {
+        $db = \Config\Database::connect();
+        return $db->table('pagos')
+            ->where('num_control', $numControl)
+            ->where('nivel', $nivel)
+            ->whereNotIn('concepto', ['inscripcion', 'reinscripcion', 'mensualidad'])
+            ->orderBy('created_at', 'ASC')
+            ->get()->getResultArray();
+    }
+
+    // ── Totales por tipo de concepto ─────────────────────────────────
+
+    public function getTotalesPagado(string $numControl, string $nivel): array
+    {
+        $db = \Config\Database::connect();
+
+        $tInsc = (float) ($db->table('pagos')
+            ->selectSum('monto', 'total')
+            ->where('num_control', $numControl)
+            ->where('nivel', $nivel)
+            ->whereIn('concepto', ['inscripcion', 'reinscripcion'])
+            ->get()->getRowArray()['total'] ?? 0);
+
+        $tMens = (float) ($db->table('pagos')
+            ->selectSum('monto', 'total')
+            ->where('num_control', $numControl)
+            ->where('nivel', $nivel)
+            ->where('concepto', 'mensualidad')
+            ->get()->getRowArray()['total'] ?? 0);
+
+        $cMens = (int) $db->table('pagos')
+            ->where('num_control', $numControl)
+            ->where('nivel', $nivel)
+            ->where('concepto', 'mensualidad')
+            ->countAllResults();
+
+        $tOtros = (float) ($db->table('pagos')
+            ->selectSum('monto', 'total')
+            ->where('num_control', $numControl)
+            ->where('nivel', $nivel)
+            ->whereNotIn('concepto', ['inscripcion', 'reinscripcion', 'mensualidad'])
+            ->get()->getRowArray()['total'] ?? 0);
+
+        return [
+            'inscripciones'      => $tInsc,
+            'mensualidades'      => $tMens,
+            'mensualidades_cnt'  => $cMens,
+            'otros'              => $tOtros,
+            'total'              => $tInsc + $tMens + $tOtros,
+        ];
     }
 
     // ── Reporte de morosos ───────────────────────────────────────────

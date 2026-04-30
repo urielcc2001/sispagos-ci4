@@ -15,7 +15,6 @@ body {
     padding: 24pt 42pt 38pt;
 }
 
-/* ── Encabezado ──────────────────────────────────────────────── */
 .header-wrap {
     width: 100%;
     border-bottom: 2.5pt solid #003087;
@@ -32,7 +31,6 @@ body {
 .subtitulo { font-size: 8.5pt; color: #555; margin-top: 1pt; }
 .meta      { font-size: 7pt; color: #999; margin-top: 2pt; }
 
-/* ── Tabla ───────────────────────────────────────────────────── */
 table {
     width: 100%;
     border-collapse: collapse;
@@ -62,7 +60,7 @@ tbody td {
     border-bottom: 0.3pt solid #dde4f0;
     vertical-align: middle;
 }
-tbody td.r { text-align: right; font-variant-numeric: tabular-nums; }
+tbody td.r { text-align: right; }
 
 td.folio {
     font-size: 6pt;
@@ -71,7 +69,23 @@ td.folio {
     font-family: Courier, monospace;
     word-break: break-all;
 }
-td.control {
+td.tipo-alumno {
+    font-size: 6.5pt;
+    font-weight: bold;
+    color: #fff;
+    background: #003087;
+    text-align: center;
+    white-space: nowrap;
+}
+td.tipo-externo {
+    font-size: 6.5pt;
+    font-weight: bold;
+    color: #fff;
+    background: #b45309;
+    text-align: center;
+    white-space: nowrap;
+}
+td.nombre {
     font-weight: bold;
     color: #333;
 }
@@ -79,14 +93,22 @@ td.monto {
     font-weight: bold;
     color: #1a4a1a;
     text-align: right;
-    font-variant-numeric: tabular-nums;
 }
 td.hora {
     font-size: 6pt;
     color: #aaa;
 }
 
-/* ── Fila de total ───────────────────────────────────────────── */
+.subtotal-row td {
+    background: #d6e4f7;
+    color: #002060;
+    font-weight: bold;
+    font-size: 7.5pt;
+    padding: 3.5pt 6pt;
+    border: none;
+}
+.subtotal-row td.r { text-align: right; }
+
 tfoot tr td {
     background: #002060;
     color: white;
@@ -97,7 +119,6 @@ tfoot tr td {
 }
 tfoot tr td.r { text-align: right; }
 
-/* ── Pie ─────────────────────────────────────────────────────── */
 .footer {
     margin-top: 8pt;
     font-size: 6pt;
@@ -110,10 +131,10 @@ tfoot tr td.r { text-align: right; }
 
 <?php
 $conceptoLabels = [
-    'inscripcion'   => 'Inscripción',
-    'reinscripcion' => 'Reinscripción',
+    'inscripcion'   => 'Inscripcion',
+    'reinscripcion' => 'Reinscripcion',
     'mensualidad'   => 'Mensualidad',
-    'tramite'       => 'Trámite',
+    'tramite'       => 'Tramite',
 ];
 $nivelLabels = ['uni' => 'Universidad', 'prepa' => 'Bachillerato', 'posgrado' => 'Posgrado'];
 
@@ -132,69 +153,100 @@ if ($fi && $ff && $fi === $ff) {
     $rangoLabel = 'Todos los registros';
 }
 
-$numRegistros = count($pagos);
+$origen = $filtros['origen'] ?? '';
+if ($origen === 'alumnos')       $origenLabel = ' - Solo Alumnos';
+elseif ($origen === 'externos')  $origenLabel = ' - Solo Externos';
+else                             $origenLabel = '';
+
+$numRegistros  = count($pagos);
+$totalAlumnos  = array_sum(array_column(array_filter($pagos, fn($p) => $p['tipo_pago'] === 'alumno'), 'monto'));
+$totalExternos = array_sum(array_column(array_filter($pagos, fn($p) => $p['tipo_pago'] === 'externo'), 'monto'));
+$hayAmbos      = $totalAlumnos > 0 && $totalExternos > 0;
 ?>
 
-<!-- Encabezado -->
 <div class="header-wrap">
-  <div class="titulo">Reporte de Ingresos</div>
-  <div class="subtitulo"><?= esc($rangoLabel) ?> &nbsp;·&nbsp; <?= $numRegistros ?> registro<?= $numRegistros !== 1 ? 's' : '' ?></div>
+  <div class="titulo">Reporte Financiero Integral</div>
+  <div class="subtitulo">
+    <?= esc($rangoLabel) ?><?= esc($origenLabel) ?>
+    &nbsp;·&nbsp;
+    <?= $numRegistros ?> registro<?= $numRegistros !== 1 ? 's' : '' ?>
+  </div>
   <div class="meta">Generado el <?= date('d/m/Y \a \l\a\s H:i') ?></div>
 </div>
 
-<!-- Tabla de registros -->
 <table>
   <thead>
     <tr>
-      <th style="width:22%">Folio</th>
-      <th style="width:11%">Fecha</th>
-      <th style="width:11%">No. Control</th>
-      <th style="width:18%">Concepto</th>
-      <th style="width:12%">Nivel</th>
-      <th style="width:15%">Cajero</th>
-      <th class="r" style="width:11%">Monto</th>
+      <th style="width:19%">Folio</th>
+      <th style="width:8%">Tipo</th>
+      <th style="width:10%">Fecha</th>
+      <th style="width:20%">Nombre</th>
+      <th style="width:17%">Concepto</th>
+      <th style="width:10%">Nivel</th>
+      <th style="width:13%">Cajero</th>
+      <th class="r" style="width:10%">Monto</th>
     </tr>
   </thead>
   <tbody>
     <?php if (empty($pagos)): ?>
     <tr>
-      <td colspan="7" style="text-align:center; padding:14pt; color:#aaa;">
+      <td colspan="8" style="text-align:center; padding:14pt; color:#aaa;">
         No se encontraron registros con los filtros aplicados.
       </td>
     </tr>
     <?php else: ?>
     <?php foreach ($pagos as $p): ?>
     <?php
-        $concepto = $conceptoLabels[$p['concepto']] ?? $p['concepto'];
-        if ($p['concepto'] === 'tramite' && ! empty($p['detalle_tramite'])) {
-            $concepto .= ' — ' . $p['detalle_tramite'];
+        if ($p['tipo_pago'] === 'alumno') {
+            $concepto = $conceptoLabels[$p['concepto']] ?? $p['concepto'];
+            if ($p['concepto'] === 'tramite' && ! empty($p['detalle_tramite'])) {
+                $concepto .= ' - ' . $p['detalle_tramite'];
+            }
+        } else {
+            $concepto = $p['concepto'];
         }
+        $nivelLabel = ! empty($p['nivel']) ? ($nivelLabels[$p['nivel']] ?? $p['nivel']) : '---';
     ?>
     <tr>
-      <td class="folio"><?= esc($p['folio_digital'] ?? '—') ?></td>
+      <td class="folio"><?= esc($p['folio_digital'] ?? '---') ?></td>
+      <td class="<?= $p['tipo_pago'] === 'alumno' ? 'tipo-alumno' : 'tipo-externo' ?>">
+        <?= $p['tipo_pago'] === 'alumno' ? 'ALUMNO' : 'EXTERNO' ?>
+      </td>
       <td>
         <?= date('d/m/Y', strtotime($p['created_at'])) ?>
         <br><span class="hora"><?= date('H:i', strtotime($p['created_at'])) ?></span>
       </td>
-      <td class="control"><?= esc($p['num_control'] ?? '—') ?></td>
+      <td class="nombre"><?= esc($p['nombre'] ?? '---') ?></td>
       <td><?= esc($concepto) ?></td>
-      <td><?= esc($nivelLabels[$p['nivel']] ?? $p['nivel']) ?></td>
+      <td><?= esc($nivelLabel) ?></td>
       <td><?= esc($p['nombre_cajero'] ?? 'N/D') ?></td>
       <td class="monto">$<?= number_format((float) $p['monto'], 2) ?></td>
     </tr>
     <?php endforeach; ?>
+
+    <?php if ($hayAmbos): ?>
+    <tr class="subtotal-row">
+      <td colspan="7" class="r" style="padding-right:8pt;">Subtotal Alumnos</td>
+      <td class="r">$<?= number_format((float) $totalAlumnos, 2) ?></td>
+    </tr>
+    <tr class="subtotal-row">
+      <td colspan="7" class="r" style="padding-right:8pt;">Subtotal Externos</td>
+      <td class="r">$<?= number_format((float) $totalExternos, 2) ?></td>
+    </tr>
+    <?php endif; ?>
+
     <?php endif; ?>
   </tbody>
   <tfoot>
     <tr>
-      <td colspan="6" class="r" style="padding-right:8pt; letter-spacing:0.3pt;">TOTAL GENERAL</td>
+      <td colspan="7" class="r" style="padding-right:8pt; letter-spacing:0.3pt;">TOTAL GENERAL</td>
       <td class="r">$<?= number_format((float) $totalGeneral, 2) ?></td>
     </tr>
   </tfoot>
 </table>
 
 <div class="footer">
-  SistemaPagos &copy; <?= date('Y') ?> — Documento generado automáticamente. No requiere firma.
+  SistemaPagos &copy; <?= date('Y') ?> — Documento generado automaticamente. No requiere firma.
 </div>
 
 </body>

@@ -29,6 +29,7 @@ class AdminController extends BaseController
         $periodo     = $request->getGet('periodo');
         $idCajero    = $request->getGet('id_cajero');
         $nivel       = $request->getGet('nivel');
+        $origen      = $request->getGet('origen') ?? '';
 
         if ($periodo === 'hoy') {
             $fechaInicio = date('Y-m-d');
@@ -41,21 +42,44 @@ class AdminController extends BaseController
             $fechaFin    = date('Y-m-d');
         }
 
-        $builder = $db->table('pagos p')
-            ->select('p.id, p.folio_digital, p.num_control, p.nombre_alumno, p.concepto, p.detalle_tramite, p.nivel, p.periodo_pago, p.monto, p.created_at, u.nombre AS nombre_cajero')
-            ->join('usuarios u', 'u.id = p.id_cajero', 'left');
+        $pagos = [];
 
-        if ($fechaInicio) $builder->where('DATE(p.created_at) >=', $fechaInicio);
-        if ($fechaFin)    $builder->where('DATE(p.created_at) <=', $fechaFin);
-        if ($idCajero)    $builder->where('p.id_cajero', (int) $idCajero);
-        if ($nivel)       $builder->where('p.nivel', $nivel);
+        if ($origen !== 'externos') {
+            $b = $db->table('pagos p')
+                ->select('p.id, p.folio_digital, p.num_control, p.nombre_alumno AS nombre, p.concepto, p.detalle_tramite, p.nivel, p.monto, p.created_at, u.nombre AS nombre_cajero')
+                ->join('usuarios u', 'u.id = p.id_cajero', 'left');
+            if ($fechaInicio) $b->where('DATE(p.created_at) >=', $fechaInicio);
+            if ($fechaFin)    $b->where('DATE(p.created_at) <=', $fechaFin);
+            if ($idCajero)    $b->where('p.id_cajero', (int) $idCajero);
+            if ($nivel)       $b->where('p.nivel', $nivel);
+            foreach ($b->get()->getResultArray() as $r) {
+                $r['tipo_pago'] = 'alumno';
+                $pagos[] = $r;
+            }
+        }
 
-        $pagos = $builder->orderBy('p.created_at', 'DESC')->get()->getResultArray();
+        if ($origen !== 'alumnos') {
+            $b = $db->table('pagos_externos pe')
+                ->select('pe.id, pe.folio_digital, pe.nombre_cliente AS nombre, pe.concepto, pe.nivel, pe.monto, pe.created_at, u.nombre AS nombre_cajero')
+                ->join('usuarios u', 'u.id = pe.id_cajero', 'left');
+            if ($fechaInicio) $b->where('DATE(pe.created_at) >=', $fechaInicio);
+            if ($fechaFin)    $b->where('DATE(pe.created_at) <=', $fechaFin);
+            if ($idCajero)    $b->where('pe.id_cajero', (int) $idCajero);
+            if ($nivel)       $b->where('pe.nivel', $nivel);
+            foreach ($b->get()->getResultArray() as $r) {
+                $r['tipo_pago']       = 'externo';
+                $r['num_control']     = null;
+                $r['detalle_tramite'] = null;
+                $pagos[] = $r;
+            }
+        }
+
+        usort($pagos, fn($a, $b) => strcmp($b['created_at'], $a['created_at']));
 
         return [
             'pagos'        => $pagos,
             'totalGeneral' => array_sum(array_column($pagos, 'monto')),
-            'filtros'      => compact('fechaInicio', 'fechaFin', 'periodo', 'idCajero', 'nivel'),
+            'filtros'      => compact('fechaInicio', 'fechaFin', 'periodo', 'idCajero', 'nivel', 'origen'),
         ];
     }
 
@@ -78,7 +102,7 @@ class AdminController extends BaseController
             return $guard;
         }
 
-        ['pagos' => $pagos, 'totalGeneral' => $total, 'filtros' => $filtros] = $this->filtrarPagos();
+        ['pagos' => $pagos, 'totalGeneral' => $total] = $this->filtrarPagos();
 
         $conceptoLabels = [
             'inscripcion'   => 'Inscripción',
@@ -91,25 +115,44 @@ class AdminController extends BaseController
         $esc = fn(string $v): string => '"' . str_replace('"', '""', $v) . '"';
 
         $lines   = [];
-        $lines[] = implode(',', array_map($esc, ['Folio', 'Fecha', 'Alumno', 'Concepto', 'Nivel', 'Cajero', 'Monto']));
+        $lines[] = implode(',', array_map($esc, ['Folio', 'Tipo', 'Fecha', 'Nombre', 'Concepto', 'Nivel', 'Cajero', 'Monto']));
 
         foreach ($pagos as $p) {
-            $concepto = $conceptoLabels[$p['concepto']] ?? $p['concepto'];
-            if ($p['concepto'] === 'tramite' && ! empty($p['detalle_tramite'])) {
-                $concepto .= ' - ' . $p['detalle_tramite'];
+            $tipoLabel = $p['tipo_pago'] === 'externo' ? 'Externo/Aspirante' : 'Alumno';
+
+            if ($p['tipo_pago'] === 'alumno') {
+                $concepto = $conceptoLabels[$p['concepto']] ?? $p['concepto'];
+                if ($p['concepto'] === 'tramite' && ! empty($p['detalle_tramite'])) {
+                    $concepto .= ' - ' . $p['detalle_tramite'];
+                }
+            } else {
+                $concepto = $p['concepto'];
             }
+
+            $nivelLabel = ! empty($p['nivel']) ? ($nivelLabels[$p['nivel']] ?? $p['nivel']) : '—';
+
             $lines[] = implode(',', array_map($esc, [
                 $p['folio_digital'] ?? '',
+                $tipoLabel,
                 date('d/m/Y H:i', strtotime($p['created_at'])),
-                $p['nombre_alumno'],
+                $p['nombre'] ?? '',
                 $concepto,
-                $nivelLabels[$p['nivel']] ?? $p['nivel'],
+                $nivelLabel,
                 $p['nombre_cajero'] ?? 'N/D',
                 number_format((float) $p['monto'], 2, '.', ''),
             ]));
         }
 
-        $lines[] = implode(',', array_map($esc, ['', '', '', '', '', 'TOTAL GENERAL', number_format((float) $total, 2, '.', '')]));
+        $pagosAlumnos  = array_filter($pagos, fn($p) => $p['tipo_pago'] === 'alumno');
+        $pagosExternos = array_filter($pagos, fn($p) => $p['tipo_pago'] === 'externo');
+        if (count($pagosAlumnos) > 0 && count($pagosExternos) > 0) {
+            $subAlumnos  = array_sum(array_column($pagosAlumnos, 'monto'));
+            $subExternos = array_sum(array_column($pagosExternos, 'monto'));
+            $lines[] = implode(',', array_map($esc, ['', '', '', '', '', '', 'Subtotal Alumnos',  number_format((float) $subAlumnos,  2, '.', '')]));
+            $lines[] = implode(',', array_map($esc, ['', '', '', '', '', '', 'Subtotal Externos', number_format((float) $subExternos, 2, '.', '')]));
+        }
+
+        $lines[] = implode(',', array_map($esc, ['', '', '', '', '', '', 'TOTAL GENERAL', number_format((float) $total, 2, '.', '')]));
 
         $csv      = "\xEF\xBB\xBF" . implode("\r\n", $lines);
         $filename = 'reporte-pagos-' . date('Ymd-His') . '.csv';
@@ -148,46 +191,137 @@ class AdminController extends BaseController
 
     public function dashboard()
     {
-        if ($guard = $this->checkAdmin()) {
-            return $guard;
+        $session = service('session');
+        if (! $session->get('logged_in') || ! in_array($session->get('rol'), ['admin', 'cajero'], true)) {
+            return redirect()->to(base_url('auth/login'));
         }
 
-        $db  = \Config\Database::connect();
-        $hoy = date('Y-m-d');
+        $rol       = $session->get('rol');
+        $idUsuario = (int) $session->get('id_usuario');
+        $db        = \Config\Database::connect();
+        $hoy       = date('Y-m-d');
 
-        $totalHoy = (float) ($db->table('pagos')
-            ->selectSum('monto', 'total')
-            ->where('DATE(created_at)', $hoy)
-            ->get()->getRowArray()['total'] ?? 0);
+        $pagosRecientes    = [];
+        $externosRecientes = [];
+        $actividadReciente = [];
 
-        $pagosHoy = (int) $db->table('pagos')
-            ->where('DATE(created_at)', $hoy)
-            ->countAllResults();
+        if ($rol === 'admin') {
 
-        $alumnosHoy = (int) ($db->query(
-            'SELECT COUNT(DISTINCT num_control) AS cnt FROM pagos WHERE DATE(created_at) = CURDATE()'
-        )->getRowArray()['cnt'] ?? 0);
+            $totalAlumnos = (float) ($db->table('pagos')
+                ->selectSum('monto', 'total')
+                ->where('DATE(created_at)', $hoy)
+                ->get()->getRowArray()['total'] ?? 0);
 
-        $pagosRecientes = $db->table('pagos p')
-            ->select('p.id, p.folio_digital, p.nombre_alumno, p.concepto, p.detalle_tramite, p.monto, p.created_at, u.nombre AS nombre_cajero')
-            ->join('usuarios u', 'u.id = p.id_cajero', 'left')
-            ->orderBy('p.created_at', 'DESC')
-            ->limit(10)
-            ->get()->getResultArray();
+            $totalExternos = (float) ($db->table('pagos_externos')
+                ->selectSum('monto', 'total')
+                ->where('DATE(created_at)', $hoy)
+                ->get()->getRowArray()['total'] ?? 0);
 
-        $externosRecientes = $db->table('pagos_externos pe')
-            ->select('pe.id, pe.folio_digital, pe.nombre_cliente, pe.concepto, pe.monto, pe.metodo_pago, pe.created_at, u.nombre AS nombre_cajero')
-            ->join('usuarios u', 'u.id = pe.id_cajero', 'left')
-            ->orderBy('pe.created_at', 'DESC')
-            ->limit(10)
-            ->get()->getResultArray();
+            $pagosAlumnos = (int) $db->table('pagos')
+                ->where('DATE(created_at)', $hoy)
+                ->countAllResults();
+
+            $pagosExternos = (int) $db->table('pagos_externos')
+                ->where('DATE(created_at)', $hoy)
+                ->countAllResults();
+
+            $alumnosHoy = (int) ($db->table('pagos')
+                ->select('COUNT(DISTINCT num_control) AS cnt')
+                ->where('DATE(created_at)', $hoy)
+                ->get()->getRowArray()['cnt'] ?? 0);
+
+            $externasHoy = (int) $db->table('pagos_externos')
+                ->where('DATE(created_at)', $hoy)
+                ->countAllResults();
+
+            $pagosRecientes = $db->table('pagos p')
+                ->select('p.id, p.folio_digital, p.nombre_alumno, p.concepto, p.detalle_tramite, p.monto, p.created_at, u.nombre AS nombre_cajero')
+                ->join('usuarios u', 'u.id = p.id_cajero', 'left')
+                ->orderBy('p.created_at', 'DESC')
+                ->limit(10)
+                ->get()->getResultArray();
+
+            $externosRecientes = $db->table('pagos_externos pe')
+                ->select('pe.id, pe.folio_digital, pe.nombre_cliente, pe.concepto, pe.monto, pe.metodo_pago, pe.created_at, u.nombre AS nombre_cajero')
+                ->join('usuarios u', 'u.id = pe.id_cajero', 'left')
+                ->orderBy('pe.created_at', 'DESC')
+                ->limit(10)
+                ->get()->getResultArray();
+
+        } else {
+            // Cajero — solo registros propios del día
+
+            $totalAlumnos = (float) ($db->table('pagos')
+                ->selectSum('monto', 'total')
+                ->where('DATE(created_at)', $hoy)
+                ->where('id_cajero', $idUsuario)
+                ->get()->getRowArray()['total'] ?? 0);
+
+            $totalExternos = (float) ($db->table('pagos_externos')
+                ->selectSum('monto', 'total')
+                ->where('DATE(created_at)', $hoy)
+                ->where('id_cajero', $idUsuario)
+                ->get()->getRowArray()['total'] ?? 0);
+
+            $pagosAlumnos = (int) $db->table('pagos')
+                ->where('DATE(created_at)', $hoy)
+                ->where('id_cajero', $idUsuario)
+                ->countAllResults();
+
+            $pagosExternos = (int) $db->table('pagos_externos')
+                ->where('DATE(created_at)', $hoy)
+                ->where('id_cajero', $idUsuario)
+                ->countAllResults();
+
+            $alumnosHoy = (int) ($db->table('pagos')
+                ->select('COUNT(DISTINCT num_control) AS cnt')
+                ->where('DATE(created_at)', $hoy)
+                ->where('id_cajero', $idUsuario)
+                ->get()->getRowArray()['cnt'] ?? 0);
+
+            $externasHoy = (int) $db->table('pagos_externos')
+                ->where('DATE(created_at)', $hoy)
+                ->where('id_cajero', $idUsuario)
+                ->countAllResults();
+
+            // Actividad reciente unificada
+            $rawAlumnos = $db->table('pagos p')
+                ->select('p.id, p.folio_digital, p.nombre_alumno AS nombre, p.concepto, p.detalle_tramite, p.monto, p.created_at')
+                ->where('p.id_cajero', $idUsuario)
+                ->orderBy('p.created_at', 'DESC')
+                ->limit(15)
+                ->get()->getResultArray();
+
+            $rawExternos = $db->table('pagos_externos pe')
+                ->select('pe.id, pe.folio_digital, pe.nombre_cliente AS nombre, pe.concepto, pe.monto, pe.created_at')
+                ->where('pe.id_cajero', $idUsuario)
+                ->orderBy('pe.created_at', 'DESC')
+                ->limit(15)
+                ->get()->getResultArray();
+
+            foreach ($rawAlumnos as &$r) {
+                $r['tipo_pago'] = 'alumno';
+            }
+            unset($r);
+            foreach ($rawExternos as &$r) {
+                $r['tipo_pago']       = 'externo';
+                $r['detalle_tramite'] = null;
+            }
+            unset($r);
+
+            $actividadReciente = array_merge($rawAlumnos, $rawExternos);
+            usort($actividadReciente, fn($a, $b) => strcmp($b['created_at'], $a['created_at']));
+            $actividadReciente = array_slice($actividadReciente, 0, 15);
+        }
 
         return view('admin/dashboard', [
-            'totalHoy'          => $totalHoy,
-            'pagosHoy'          => $pagosHoy,
-            'alumnosHoy'        => $alumnosHoy,
+            'rol'               => $rol,
+            'totalHoy'          => $totalAlumnos + $totalExternos,
+            'pagosHoy'          => $pagosAlumnos + $pagosExternos,
+            'personasHoy'       => $alumnosHoy + $externasHoy,
             'pagosRecientes'    => $pagosRecientes,
             'externosRecientes' => $externosRecientes,
+            'actividadReciente' => $actividadReciente,
         ]);
     }
 
@@ -273,19 +407,25 @@ class AdminController extends BaseController
         $anio       = (int) ($this->request->getGet('anio') ?? date('Y'));
 
         $data = [
-            'num_control' => $numControl,
-            'nivel'       => $nivel,
-            'anio'        => $anio,
-            'estado'      => [],
-            'info_alumno' => null,
-            'anios'       => [],
+            'num_control'   => $numControl,
+            'nivel'         => $nivel,
+            'anio'          => $anio,
+            'estado'        => [],
+            'info_alumno'   => null,
+            'anios'         => [],
+            'inscripciones' => [],
+            'pagos_otros'   => [],
+            'totales'       => null,
         ];
 
         if ($numControl && $nivel) {
-            $model              = new \App\Models\AdeudoModel();
-            $data['estado']     = $model->getEstadoCuentaMensual($numControl, $nivel, $anio);
-            $data['info_alumno'] = $model->getInfoAlumno($numControl, $nivel);
-            $data['anios']      = $model->getAniosConPagos($numControl, $nivel);
+            $model                 = new \App\Models\AdeudoModel();
+            $data['estado']        = $model->getEstadoCuentaMensual($numControl, $nivel, $anio);
+            $data['info_alumno']   = $model->getInfoAlumno($numControl, $nivel);
+            $data['anios']         = $model->getAniosConPagos($numControl, $nivel);
+            $data['inscripciones'] = $model->getInscripciones($numControl, $nivel);
+            $data['pagos_otros']   = $model->getPagosOtros($numControl, $nivel);
+            $data['totales']       = $model->getTotalesPagado($numControl, $nivel);
         }
 
         return view('admin/estado_cuenta', $data);

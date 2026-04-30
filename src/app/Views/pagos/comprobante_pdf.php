@@ -299,9 +299,7 @@ foreach ($copias as $copia):
 <!-- fin sección -->
 
 <?php if ($copia === 'COPIA PARA EL ALUMNO'): ?>
-<div class="separador">
-  ✂ &nbsp;&nbsp; — — — — — — — — — — — — — — — — — — — — — — — — — — — — — — — — — &nbsp;&nbsp; ✂
-</div>
+<div class="separador"></div>
 <?php endif; ?>
 
 <?php endforeach; ?>

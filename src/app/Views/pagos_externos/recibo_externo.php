@@ -257,17 +257,18 @@ foreach ($copias as $copia):
   <?php $urlValidacion = base_url('pagos-externos/validar/' . ($pago['sello_digital'] ?? '')); ?>
   <table class="pie-table">
     <tr>
-      <td style="vertical-align:bottom; text-align:left;">
+      <td style="width:160pt; vertical-align:bottom; text-align:left;">
         <div class="firma-linea"></div>
         Firma y Sello
       </td>
+      <td style="vertical-align:middle; text-align:center;">
+        <img src="https://api.qrserver.com/v1/create-qr-code/?size=100x100&data=<?= urlencode($urlValidacion) ?>"
+             style="width:60pt; height:60pt; display:block; margin:0 auto; border:0.5pt solid #ccc; padding:1pt;">
+        <div class="qr-label">VERIFICAR AUTENTICIDAD</div>
+      </td>
+      <td style="width:160pt;"></td>
     </tr>
   </table>
-  <div style="text-align:center; margin-top:-2pt;">
-    <img src="https://api.qrserver.com/v1/create-qr-code/?size=100x100&data=<?= urlencode($urlValidacion) ?>"
-         style="width:60pt; height:60pt; display:block; margin:0 auto; border:0.5pt solid #ccc; padding:1pt;">
-    <div class="qr-label">VERIFICAR AUTENTICIDAD</div>
-  </div>
 
   <!-- Sello Digital de Seguridad -->
   <div class="sello-digital">
@@ -277,9 +278,7 @@ foreach ($copias as $copia):
 </div>
 
 <?php if ($copia === 'COPIA PARA EL CLIENTE'): ?>
-<div class="separador">
-  ✂ &nbsp;&nbsp; — — — — — — — — — — — — — — — — — — — — — — — — — — — — — — — — — &nbsp;&nbsp; ✂
-</div>
+<div class="separador"></div>
 <?php endif; ?>
 
 <?php endforeach; ?>
