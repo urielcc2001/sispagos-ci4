@@ -83,40 +83,108 @@ class PagosController extends BaseController
         }
 
         if ($nivel === 'uni') {
-            $db  = \Config\Database::connect('uni');
-            $row = $db->table('alumnos_datos_personales')
-                      ->select('Nombres, apellido_paterno, apellido_materno, Licenciatura, modalidad')
-                      ->where('numero_control', $numControl)
-                      ->get()->getRowArray();
+            $db   = \Config\Database::connect('uni');
+            $base = $db->table('alumnos_datos_personales')
+                       ->select('Nombres, apellido_paterno, apellido_materno, id_grupo, Licenciatura, modalidad')
+                       ->where('numero_control', $numControl)
+                       ->get()->getRowArray();
 
-            if (! $row) {
+            if (! $base) {
                 return $this->response->setJSON(['found' => false]);
             }
 
+            $nombre  = trim("{$base['Nombres']} {$base['apellido_paterno']} {$base['apellido_materno']}");
+            $idGrupo = (int) ($base['id_grupo'] ?? 0);
+
+            // Caso A: tiene grupo válido → JOINs para datos oficiales
+            if ($idGrupo > 0) {
+                $row = $db->table('alumnos_datos_personales adp')
+                          ->select('lic.licenciaturas AS carrera,
+                                    gm.modalidad, gm.cuatrisem, gm.generacion, gm.id_inter')
+                          ->join('grupos_modalidad gm', 'gm.id_grupos = adp.id_grupo', 'left')
+                          ->join('licenciaturas lic', 'lic.id = gm.licenciatura', 'left')
+                          ->where('adp.numero_control', $numControl)
+                          ->get()->getRowArray();
+
+                $idInter     = (int) ($row['id_inter'] ?? 0);
+                $tipoPeriodo = match ($idInter) {
+                    1 => 'Normal',
+                    2 => 'Inter',
+                    default => null,
+                };
+                $interLabel  = match ($idInter) {
+                    1 => 'Normal',
+                    2 => 'Intercuatrisemestral',
+                    default => null,
+                };
+
+                return $this->response->setJSON([
+                    'found'        => true,
+                    'nombre'       => $nombre,
+                    'carrera'      => $row['carrera']    ?? null,
+                    'modalidad'    => $row['modalidad']  ?? null,
+                    'cuatrisem'    => $row['cuatrisem']  ?? null,
+                    'generacion'   => $row['generacion'] ?? null,
+                    'tipo_periodo' => $tipoPeriodo,
+                    'inter_label'  => $interLabel,
+                    'editable'     => false,
+                ]);
+            }
+
+            // Caso B: id_grupo = 0 → datos locales, campos editables
             return $this->response->setJSON([
-                'found'    => true,
-                'nombre'   => trim("{$row['Nombres']} {$row['apellido_paterno']} {$row['apellido_materno']}"),
-                'carrera'  => $row['Licenciatura'],
-                'modalidad' => $row['modalidad'],
+                'found'        => true,
+                'nombre'       => $nombre,
+                'carrera'      => $base['Licenciatura'] ?? null,
+                'modalidad'    => $base['modalidad']    ?? null,
+                'cuatrisem'    => null,
+                'generacion'   => null,
+                'tipo_periodo' => 'Normal',
+                'editable'     => true,
             ]);
         }
 
         if ($nivel === 'prepa') {
-            $db  = \Config\Database::connect('prepa');
-            $row = $db->table('alumno_datos')
-                      ->select('nombres, apellido_paterno, apellido_materno')
-                      ->where('numero_control', $numControl)
-                      ->get()->getRowArray();
+            $db   = \Config\Database::connect('prepa');
+            $base = $db->table('alumno_datos')
+                       ->select('nombres, apellido_paterno, apellido_materno, id_grupo')
+                       ->where('numero_control', $numControl)
+                       ->get()->getRowArray();
 
-            if (! $row) {
+            if (! $base) {
                 return $this->response->setJSON(['found' => false]);
             }
 
+            $nombre  = trim("{$base['nombres']} {$base['apellido_paterno']} {$base['apellido_materno']}");
+            $idGrupo = (int) ($base['id_grupo'] ?? 0);
+
+            if ($idGrupo > 0) {
+                try {
+                    $row = $db->table('grupos_modalidad')
+                              ->select('cuatrisem, modalidad')
+                              ->where('id_grupos', $idGrupo)
+                              ->get()->getRowArray();
+                } catch (\Throwable $e) {
+                    log_message('error', '[buscarAlumno prepa] ' . $e->getMessage());
+                    $row = null;
+                }
+
+                return $this->response->setJSON([
+                    'found'     => true,
+                    'nombre'    => $nombre,
+                    'modalidad' => $row['modalidad'] ?? null,
+                    'semestre'  => $row['cuatrisem']  ?? null,
+                    'editable'  => $row === null,
+                ]);
+            }
+
+            // id_grupo = 0 → selección manual
             return $this->response->setJSON([
-                'found'    => true,
-                'nombre'   => trim("{$row['nombres']} {$row['apellido_paterno']} {$row['apellido_materno']}"),
-                'carrera'  => null,
+                'found'     => true,
+                'nombre'    => $nombre,
                 'modalidad' => null,
+                'semestre'  => null,
+                'editable'  => true,
             ]);
         }
 

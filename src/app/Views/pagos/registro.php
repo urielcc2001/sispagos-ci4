@@ -88,7 +88,8 @@
                 <label for="sel-modalidad-prepa">Modalidad</label>
                 <select id="sel-modalidad-prepa" class="form-control">
                   <option value="">— Selecciona —</option>
-                  <option value="Escolarizado">Escolarizado</option>
+                  <option value="Escolarizado 3 Años">Escolarizado 3 Años</option>
+                  <option value="Escolarizado 2 Años">Escolarizado 2 Años</option>
                   <option value="Sabatino">Sabatino</option>
                   <option value="Dominical">Dominical</option>
                   <option value="Nocturno">Nocturno</option>
@@ -96,10 +97,38 @@
               </div>
             </div>
 
+            <div class="col-md-2" id="grupo-semestre-prepa" style="display:none">
+              <div class="form-group">
+                <label>Semestre Actual</label>
+                <input type="text" id="txt-semestre-prepa" class="form-control bg-light" readonly placeholder="—">
+              </div>
+            </div>
+
             <div class="col-md-2" id="grupo-generacion-posgrado" style="display:none">
               <div class="form-group">
                 <label>Generación</label>
                 <input type="text" id="txt-generacion" class="form-control bg-light" readonly placeholder="—">
+              </div>
+            </div>
+
+            <div class="col-md-2" id="grupo-cuatrisem-uni" style="display:none">
+              <div class="form-group">
+                <label>Cuatrimestre Actual</label>
+                <input type="text" id="txt-cuatrisem-uni" class="form-control bg-light" readonly placeholder="—">
+              </div>
+            </div>
+
+            <div class="col-md-2" id="grupo-generacion-uni" style="display:none">
+              <div class="form-group">
+                <label>Generación</label>
+                <input type="text" id="txt-generacion-uni" class="form-control bg-light" readonly placeholder="—">
+              </div>
+            </div>
+
+            <div class="col-md-2" id="grupo-inter-uni" style="display:none">
+              <div class="form-group">
+                <label>Tipo de Cuatrimestre</label>
+                <input type="text" id="txt-inter-uni" class="form-control bg-light" readonly placeholder="—">
               </div>
             </div>
 
@@ -124,7 +153,13 @@
             <div class="col-md-2" id="grupo-modalidad-txt" style="display:none">
               <div class="form-group">
                 <label>Modalidad</label>
-                <input type="text" id="txt-modalidad" class="form-control bg-light" readonly>
+                <select id="txt-modalidad" class="form-control bg-light" disabled>
+                  <option value="">— Selecciona —</option>
+                  <option value="Escolarizado">Escolarizado</option>
+                  <option value="Sabatino">Sabatino</option>
+                  <option value="Dominical">Dominical</option>
+                  <option value="En Linea">En Linea</option>
+                </select>
               </div>
             </div>
 
@@ -393,18 +428,30 @@ $(function () {
     $('#nombre_alumno').prop('readonly', !esPosgrado);
 
     $('#grupo-modalidad-prepa').toggle(esPrepa);
+    $('#grupo-semestre-prepa').hide();
     $('#grupo-carrera').toggle(esUni || esPosgrado);
     $('#grupo-carrera label').text(esPosgrado ? 'Programa de Posgrado' : 'Carrera / Licenciatura');
     $('#grupo-modalidad-txt').toggle(esUni);
     $('#grupo-generacion-posgrado').toggle(esPosgrado);
+    $('#grupo-cuatrisem-uni, #grupo-generacion-uni, #grupo-inter-uni').hide();
 
     $('#concepto option[value="mensualidad"]').text(esPosgrado ? 'Materia' : 'Mensualidad');
-    $('#sel-modalidad-prepa').val('');
+    $('#sel-modalidad-prepa').val('').prop('disabled', false).removeClass('bg-light');
+    $('#txt-semestre-prepa').val('');
     $('#modalidad_val').val('');
     if (esPosgrado) {
       $('#carrera').val('');
       $('#txt-generacion').val('');
       window._posgradoMaterias = [];
+  window._uniTipoPeriodo   = null;
+    }
+    if (esUni) {
+      $('#carrera').val('').prop('readonly', true).addClass('bg-light');
+      $('#txt-modalidad').val('').prop('disabled', true).addClass('bg-light');
+      $('#modalidad_val').val('');
+      $('#txt-cuatrisem-uni').val('');
+      $('#txt-generacion-uni').val('');
+      window._uniTipoPeriodo = null;
     }
     $('#detalle_tramite_val').val('');
     actualizarPeriodo();
@@ -415,6 +462,11 @@ $(function () {
 
   // ── Modalidad prepa → campo oculto ─────────────────────────────
   $('#sel-modalidad-prepa').on('change', function () {
+    $('#modalidad_val').val($(this).val());
+  });
+
+  // ── Modalidad uni → campo oculto ────────────────────────────────
+  $('#txt-modalidad').on('change', function () {
     $('#modalidad_val').val($(this).val());
   });
 
@@ -446,14 +498,77 @@ $(function () {
           } else if (nivel !== 'prepa') {
             $('#txt-modalidad').val(res.modalidad ?? '');
             $('#modalidad_val').val(res.modalidad ?? '');
-          } else {
-            $.get(BASE_URL + 'pagos/ultimo-pago', { num_control: numControl, concepto: 'reinscripcion' })
-              .done(function (u) {
-                const mod = u.found && u.modalidad ? u.modalidad : null;
-                if (mod) {
-                  $('#sel-modalidad-prepa').val(mod).trigger('change');
+            if (nivel === 'uni') {
+              window._uniTipoPeriodo = res.tipo_periodo ?? null;
+              if (res.editable) {
+                // id_grupo = 0: usar valores del registro del alumno si existen
+                $('#grupo-cuatrisem-uni, #grupo-generacion-uni, #grupo-inter-uni').hide();
+
+                // Carrera: bloquear si viene del registro, editable si no
+                if (res.carrera) {
+                  $('#carrera').prop('readonly', true).addClass('bg-light');
+                } else {
+                  $('#carrera').prop('readonly', false).removeClass('bg-light');
                 }
+
+                // Modalidad: bloquear si viene del registro, habilitar selector si no
+                const modUniBase = (res.modalidad ?? '').trim();
+                const $optUniBase = modUniBase
+                  ? $('#txt-modalidad option').filter(function () {
+                      return $(this).val().toLowerCase() === modUniBase.toLowerCase();
+                    })
+                  : $();
+                if ($optUniBase.length) {
+                  $('#txt-modalidad').val($optUniBase.val()).prop('disabled', true).addClass('bg-light');
+                  $('#modalidad_val').val($optUniBase.val());
+                } else {
+                  $('#txt-modalidad').val('').prop('disabled', false).removeClass('bg-light');
+                  $('#modalidad_val').val('');
+                }
+              } else {
+                // Estándar: datos de grupos_modalidad, campos bloqueados
+                const modUni  = (res.modalidad ?? '').toLowerCase();
+                const $optUni = $('#txt-modalidad option').filter(function () {
+                  return $(this).val().toLowerCase() === modUni;
+                });
+                const modUniVal = $optUni.length ? $optUni.val() : (res.modalidad ?? '');
+                $('#txt-modalidad').val(modUniVal).prop('disabled', true).addClass('bg-light');
+                $('#modalidad_val').val(modUniVal);
+                $('#carrera').prop('readonly', true).addClass('bg-light');
+                $('#txt-cuatrisem-uni').val(res.cuatrisem ?? '');
+                $('#txt-generacion-uni').val(res.generacion ?? '');
+                $('#txt-inter-uni').val(res.inter_label ?? '');
+                $('#grupo-cuatrisem-uni, #grupo-generacion-uni, #grupo-inter-uni').fadeIn(300);
+                if (window._uniTipoPeriodo && $('.btn-tipo-periodo:visible').length) {
+                  $('.btn-tipo-periodo[data-val="' + window._uniTipoPeriodo + '"]').trigger('click');
+                }
+              }
+            }
+          } else {
+            // nivel === 'prepa'
+            if (res.editable === false) {
+              // Datos de grupos_modalidad: bloquear select y mostrar semestre
+              const modDb  = (res.modalidad ?? '').toLowerCase();
+              const $match = $('#sel-modalidad-prepa option').filter(function () {
+                return $(this).val().toLowerCase() === modDb;
               });
+              const modVal = $match.length ? $match.val() : (res.modalidad ?? '');
+              $('#sel-modalidad-prepa').val(modVal).prop('disabled', true).addClass('bg-light');
+              $('#modalidad_val').val(modVal);
+              $('#txt-semestre-prepa').val(res.semestre ?? '');
+              $('#grupo-semestre-prepa').fadeIn(300);
+            } else {
+              // id_grupo = 0: selección manual
+              $('#sel-modalidad-prepa').prop('disabled', false).removeClass('bg-light');
+              $('#grupo-semestre-prepa').hide();
+              $.get(BASE_URL + 'pagos/ultimo-pago', { num_control: numControl, concepto: 'reinscripcion' })
+                .done(function (u) {
+                  const mod = u.found && u.modalidad ? u.modalidad : null;
+                  if (mod) {
+                    $('#sel-modalidad-prepa').val(mod).trigger('change');
+                  }
+                });
+            }
           }
           sugerirPeriodo();
           verificarAdeudos(numControl, nivel);
@@ -508,9 +623,13 @@ $(function () {
     setTimeout(function () {
       resetAlumnoFields();
       $('#aviso-mensualidad-directa').remove();
-      $('#grupo-modalidad-prepa, #grupo-carrera, #grupo-modalidad-txt, #grupo-tramite, #grupo-generacion-posgrado').hide();
-      $('#carrera, #txt-generacion').val('');
-      window._posgradoMaterias = [];
+      $('#grupo-modalidad-prepa, #grupo-semestre-prepa, #grupo-carrera, #grupo-modalidad-txt, #grupo-tramite, #grupo-generacion-posgrado, #grupo-cuatrisem-uni, #grupo-generacion-uni, #grupo-inter-uni').hide();
+      $('#carrera, #txt-generacion, #txt-cuatrisem-uni, #txt-generacion-uni, #txt-inter-uni, #txt-semestre-prepa').val('');
+      $('#carrera').prop('readonly', true).addClass('bg-light');
+      $('#txt-modalidad').val('').prop('disabled', true).addClass('bg-light');
+      $('#sel-modalidad-prepa').prop('disabled', false).removeClass('bg-light');
+      window._posgradoMaterias  = [];
+      window._uniTipoPeriodo    = null;
       $('#grupo-dinamico, #grupo-tipo-periodo, #grupo-bach-tipo, #grupo-selector-periodo, #grupo-materia-posgrado, #grupo-meses-mensualidad').hide();
       $('#nombre_alumno').prop('readonly', true).removeClass('is-valid is-invalid');
       $('#periodo_pago_val, #tipo_periodo_val, #detalle_tramite_val, #mes_inicio_ciclo_val').val('');
@@ -836,6 +955,9 @@ $(function () {
 
     } else if (concepto === 'inscripcion') {
       $('#grupo-tipo-periodo').show();
+      if (nivel === 'uni' && window._uniTipoPeriodo) {
+        $('.btn-tipo-periodo[data-val="' + window._uniTipoPeriodo + '"]').trigger('click');
+      }
 
       if (nivel === 'prepa') {
         $('.btn-bach-tipo').first().addClass('active');
@@ -856,6 +978,9 @@ $(function () {
 
     } else if (concepto === 'reinscripcion') {
       $('#grupo-tipo-periodo').show();
+      if (nivel === 'uni' && window._uniTipoPeriodo) {
+        $('.btn-tipo-periodo[data-val="' + window._uniTipoPeriodo + '"]').trigger('click');
+      }
 
       if (nivel === 'prepa') {
         $('.btn-bach-tipo').first().addClass('active');

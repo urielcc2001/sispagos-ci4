@@ -437,7 +437,6 @@
                 <i class="fas fa-minus mr-1"></i>Sin registro / No aplica
               </span>
               <small class="text-muted ml-1">
-                <i class="fas fa-info-circle mr-1"></i>Los meses grises no generan adeudo.
               </small>
             </div>
 
