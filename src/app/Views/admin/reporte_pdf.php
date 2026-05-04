@@ -158,10 +158,10 @@ if ($origen === 'alumnos')       $origenLabel = ' - Solo Alumnos';
 elseif ($origen === 'externos')  $origenLabel = ' - Solo Externos';
 else                             $origenLabel = '';
 
-$numRegistros  = count($pagos);
-$totalAlumnos  = array_sum(array_column(array_filter($pagos, fn($p) => $p['tipo_pago'] === 'alumno'), 'monto'));
-$totalExternos = array_sum(array_column(array_filter($pagos, fn($p) => $p['tipo_pago'] === 'externo'), 'monto'));
-$hayAmbos      = $totalAlumnos > 0 && $totalExternos > 0;
+$numRegistros          = count($pagos);
+$totalEfectivoPdf      = (float) ($totalEfectivo      ?? 0);
+$totalTransferenciaPdf = (float) ($totalTransferencia ?? 0);
+$hayAmbosMetodos       = $totalEfectivoPdf > 0 && $totalTransferenciaPdf > 0;
 ?>
 
 <div class="header-wrap">
@@ -177,20 +177,21 @@ $hayAmbos      = $totalAlumnos > 0 && $totalExternos > 0;
 <table>
   <thead>
     <tr>
-      <th style="width:19%">Folio</th>
-      <th style="width:8%">Tipo</th>
-      <th style="width:10%">Fecha</th>
-      <th style="width:20%">Nombre</th>
-      <th style="width:17%">Concepto</th>
-      <th style="width:10%">Nivel</th>
-      <th style="width:13%">Cajero</th>
-      <th class="r" style="width:10%">Monto</th>
+      <th style="width:15%">Folio</th>
+      <th style="width:7%">Tipo</th>
+      <th style="width:9%">Fecha</th>
+      <th style="width:17%">Nombre</th>
+      <th style="width:14%">Concepto</th>
+      <th style="width:8%">Nivel</th>
+      <th style="width:11%">Cajero</th>
+      <th class="r" style="width:10%">Efectivo</th>
+      <th class="r" style="width:9%">Transferencia</th>
     </tr>
   </thead>
   <tbody>
     <?php if (empty($pagos)): ?>
     <tr>
-      <td colspan="8" style="text-align:center; padding:14pt; color:#aaa;">
+      <td colspan="9" style="text-align:center; padding:14pt; color:#aaa;">
         No se encontraron registros con los filtros aplicados.
       </td>
     </tr>
@@ -222,18 +223,21 @@ $hayAmbos      = $totalAlumnos > 0 && $totalExternos > 0;
       <td><?= esc($concepto) ?></td>
       <td><?= esc($nivelLabel) ?></td>
       <td><?= esc($p['nombre_cajero'] ?? 'N/D') ?></td>
-      <td class="monto">$<?= number_format((float) $p['monto'], 2) ?></td>
+      <td class="monto"><?= ($p['metodo_pago'] ?? '') !== 'Transferencia' ? '$' . number_format((float) $p['monto'], 2) : '—' ?></td>
+      <td class="monto"><?= ($p['metodo_pago'] ?? '') === 'Transferencia' ? '$' . number_format((float) $p['monto'], 2) : '—' ?></td>
     </tr>
     <?php endforeach; ?>
 
-    <?php if ($hayAmbos): ?>
+    <?php if ($hayAmbosMetodos): ?>
     <tr class="subtotal-row">
-      <td colspan="7" class="r" style="padding-right:8pt;">Subtotal Alumnos</td>
-      <td class="r">$<?= number_format((float) $totalAlumnos, 2) ?></td>
+      <td colspan="7" class="r" style="padding-right:8pt;">Total Efectivo</td>
+      <td class="r">$<?= number_format($totalEfectivoPdf, 2) ?></td>
+      <td class="r">—</td>
     </tr>
     <tr class="subtotal-row">
-      <td colspan="7" class="r" style="padding-right:8pt;">Subtotal Externos</td>
-      <td class="r">$<?= number_format((float) $totalExternos, 2) ?></td>
+      <td colspan="7" class="r" style="padding-right:8pt;">Total Transferencia</td>
+      <td class="r">—</td>
+      <td class="r">$<?= number_format($totalTransferenciaPdf, 2) ?></td>
     </tr>
     <?php endif; ?>
 
@@ -241,8 +245,8 @@ $hayAmbos      = $totalAlumnos > 0 && $totalExternos > 0;
   </tbody>
   <tfoot>
     <tr>
-      <td colspan="7" class="r" style="padding-right:8pt; letter-spacing:0.3pt;">TOTAL GENERAL</td>
-      <td class="r">$<?= number_format((float) $totalGeneral, 2) ?></td>
+      <td colspan="7" class="r" style="padding-right:8pt; letter-spacing:0.3pt;">TOTAL</td>
+      <td colspan="2" class="r" style="font-size:9pt;">$<?= number_format((float) $totalGeneral, 2) ?></td>
     </tr>
   </tfoot>
 </table>

@@ -18,18 +18,35 @@ class AdminController extends BaseController
         return null;
     }
 
+    private function checkAuth(): mixed
+    {
+        $session = service('session');
+
+        if (! $session->get('logged_in') || ! in_array($session->get('rol'), ['admin', 'cajero'], true)) {
+            return redirect()->to(base_url('auth/login'));
+        }
+
+        return null;
+    }
+
     // ── Helper compartido: aplica filtros GET y devuelve pagos ──────
     private function filtrarPagos(): array
     {
-        $request = service('request');
-        $db      = \Config\Database::connect();
+        $session    = service('session');
+        $request    = service('request');
+        $db         = \Config\Database::connect();
+        $rol        = $session->get('rol');
+        $idSesion   = (int) $session->get('id_usuario');
 
         $fechaInicio = $request->getGet('fecha_inicio');
         $fechaFin    = $request->getGet('fecha_fin');
         $periodo     = $request->getGet('periodo');
-        $idCajero    = $request->getGet('id_cajero');
         $nivel       = $request->getGet('nivel');
         $origen      = $request->getGet('origen') ?? '';
+        $metodoPago  = $request->getGet('metodo_pago') ?? '';
+
+        // Cajero: siempre restringido a sus propios registros
+        $idCajero = ($rol === 'cajero') ? $idSesion : $request->getGet('id_cajero');
 
         if ($periodo === 'hoy') {
             $fechaInicio = date('Y-m-d');
@@ -46,12 +63,13 @@ class AdminController extends BaseController
 
         if ($origen !== 'externos') {
             $b = $db->table('pagos p')
-                ->select('p.id, p.folio_digital, p.num_control, p.nombre_alumno AS nombre, p.concepto, p.detalle_tramite, p.nivel, p.modalidad, p.monto, p.created_at, u.nombre AS nombre_cajero')
+                ->select('p.id, p.folio_digital, p.num_control, p.nombre_alumno AS nombre, p.concepto, p.detalle_tramite, p.nivel, p.modalidad, p.monto, p.metodo_pago, p.created_at, u.nombre AS nombre_cajero')
                 ->join('usuarios u', 'u.id = p.id_cajero', 'left');
             if ($fechaInicio) $b->where('DATE(p.created_at) >=', $fechaInicio);
             if ($fechaFin)    $b->where('DATE(p.created_at) <=', $fechaFin);
             if ($idCajero)    $b->where('p.id_cajero', (int) $idCajero);
             if ($nivel)       $b->where('p.nivel', $nivel);
+            if ($metodoPago)  $b->where('p.metodo_pago', $metodoPago);
             foreach ($b->get()->getResultArray() as $r) {
                 $r['tipo_pago'] = 'alumno';
                 $pagos[] = $r;
@@ -60,12 +78,13 @@ class AdminController extends BaseController
 
         if ($origen !== 'alumnos') {
             $b = $db->table('pagos_externos pe')
-                ->select('pe.id, pe.folio_digital, pe.nombre_cliente AS nombre, pe.concepto, pe.nivel, pe.monto, pe.created_at, u.nombre AS nombre_cajero')
+                ->select('pe.id, pe.folio_digital, pe.nombre_cliente AS nombre, pe.concepto, pe.nivel, pe.monto, pe.metodo_pago, pe.created_at, u.nombre AS nombre_cajero')
                 ->join('usuarios u', 'u.id = pe.id_cajero', 'left');
             if ($fechaInicio) $b->where('DATE(pe.created_at) >=', $fechaInicio);
             if ($fechaFin)    $b->where('DATE(pe.created_at) <=', $fechaFin);
             if ($idCajero)    $b->where('pe.id_cajero', (int) $idCajero);
             if ($nivel)       $b->where('pe.nivel', $nivel);
+            if ($metodoPago)  $b->where('pe.metodo_pago', $metodoPago);
             foreach ($b->get()->getResultArray() as $r) {
                 $r['tipo_pago']       = 'externo';
                 $r['num_control']     = null;
@@ -76,16 +95,29 @@ class AdminController extends BaseController
 
         usort($pagos, fn($a, $b) => strcmp($b['created_at'], $a['created_at']));
 
+        $totalEfectivo      = array_sum(array_column(
+            array_filter($pagos, fn($p) => ($p['metodo_pago'] ?? 'Efectivo') !== 'Transferencia'),
+            'monto'
+        ));
+        $totalTransferencia = array_sum(array_column(
+            array_filter($pagos, fn($p) => ($p['metodo_pago'] ?? '') === 'Transferencia'),
+            'monto'
+        ));
+
         return [
-            'pagos'        => $pagos,
-            'totalGeneral' => array_sum(array_column($pagos, 'monto')),
-            'filtros'      => compact('fechaInicio', 'fechaFin', 'periodo', 'idCajero', 'nivel', 'origen'),
+            'pagos'              => $pagos,
+            'totalGeneral'       => array_sum(array_column($pagos, 'monto')),
+            'totalEfectivo'      => $totalEfectivo,
+            'totalTransferencia' => $totalTransferencia,
+            'filtros'            => compact('fechaInicio', 'fechaFin', 'periodo', 'idCajero', 'nivel', 'origen', 'metodoPago'),
+            'rol'                => $rol,
+            'idSesion'           => $idSesion,
         ];
     }
 
     public function reportes()
     {
-        if ($guard = $this->checkAdmin()) {
+        if ($guard = $this->checkAuth()) {
             return $guard;
         }
 
@@ -98,11 +130,11 @@ class AdminController extends BaseController
 
     public function exportarCSV()
     {
-        if ($guard = $this->checkAdmin()) {
+        if ($guard = $this->checkAuth()) {
             return $guard;
         }
 
-        ['pagos' => $pagos, 'totalGeneral' => $total] = $this->filtrarPagos();
+        ['pagos' => $pagos, 'totalGeneral' => $total, 'totalEfectivo' => $totalEfectivo, 'totalTransferencia' => $totalTransferencia] = $this->filtrarPagos();
 
         $conceptoLabels = [
             'inscripcion'   => 'Inscripción',
@@ -115,7 +147,7 @@ class AdminController extends BaseController
         $esc = fn(string $v): string => '"' . str_replace('"', '""', $v) . '"';
 
         $lines   = [];
-        $lines[] = implode(',', array_map($esc, ['Folio', 'Tipo', 'Fecha', 'Nombre', 'Concepto', 'Nivel', 'Cajero', 'Monto']));
+        $lines[] = implode(',', array_map($esc, ['Folio', 'Tipo', 'Fecha', 'Nombre', 'Concepto', 'Nivel', 'Cajero', 'Efectivo', 'Transferencia']));
 
         foreach ($pagos as $p) {
             $tipoLabel = $p['tipo_pago'] === 'externo' ? 'Externo/Aspirante' : 'Alumno';
@@ -133,6 +165,7 @@ class AdminController extends BaseController
 
             $nivelLabel = ! empty($p['nivel']) ? ($nivelLabels[$p['nivel']] ?? $p['nivel']) : '—';
 
+            $esTransf = ($p['metodo_pago'] ?? '') === 'Transferencia';
             $lines[] = implode(',', array_map($esc, [
                 $p['folio_digital'] ?? '',
                 $tipoLabel,
@@ -141,20 +174,14 @@ class AdminController extends BaseController
                 $concepto,
                 $nivelLabel,
                 $p['nombre_cajero'] ?? 'N/D',
-                number_format((float) $p['monto'], 2, '.', ''),
+                $esTransf ? '' : number_format((float) $p['monto'], 2, '.', ''),
+                $esTransf ? number_format((float) $p['monto'], 2, '.', '') : '',
             ]));
         }
 
-        $pagosAlumnos  = array_filter($pagos, fn($p) => $p['tipo_pago'] === 'alumno');
-        $pagosExternos = array_filter($pagos, fn($p) => $p['tipo_pago'] === 'externo');
-        if (count($pagosAlumnos) > 0 && count($pagosExternos) > 0) {
-            $subAlumnos  = array_sum(array_column($pagosAlumnos, 'monto'));
-            $subExternos = array_sum(array_column($pagosExternos, 'monto'));
-            $lines[] = implode(',', array_map($esc, ['', '', '', '', '', '', 'Subtotal Alumnos',  number_format((float) $subAlumnos,  2, '.', '')]));
-            $lines[] = implode(',', array_map($esc, ['', '', '', '', '', '', 'Subtotal Externos', number_format((float) $subExternos, 2, '.', '')]));
-        }
-
-        $lines[] = implode(',', array_map($esc, ['', '', '', '', '', '', 'TOTAL GENERAL', number_format((float) $total, 2, '.', '')]));
+        $lines[] = implode(',', array_map($esc, ['', '', '', '', '', '', 'Total Efectivo',         number_format((float) $totalEfectivo,      2, '.', ''), '']));
+        $lines[] = implode(',', array_map($esc, ['', '', '', '', '', '', 'Total Transferencia',    '', number_format((float) $totalTransferencia, 2, '.', '')]));
+        $lines[] = implode(',', array_map($esc, ['', '', '', '', '', '', 'TOTAL',                  number_format((float) $total,               2, '.', ''), '']));
 
         $csv      = "\xEF\xBB\xBF" . implode("\r\n", $lines);
         $filename = 'reporte-pagos-' . date('Ymd-His') . '.csv';
@@ -168,7 +195,7 @@ class AdminController extends BaseController
 
     public function exportarPDF()
     {
-        if ($guard = $this->checkAdmin()) {
+        if ($guard = $this->checkAuth()) {
             return $guard;
         }
 
@@ -237,7 +264,7 @@ class AdminController extends BaseController
                 ->countAllResults();
 
             $pagosRecientes = $db->table('pagos p')
-                ->select('p.id, p.folio_digital, p.nombre_alumno, p.concepto, p.detalle_tramite, p.nivel, p.modalidad, p.monto, p.created_at, u.nombre AS nombre_cajero')
+                ->select('p.id, p.folio_digital, p.nombre_alumno, p.concepto, p.detalle_tramite, p.nivel, p.modalidad, p.monto, p.metodo_pago, p.created_at, u.nombre AS nombre_cajero')
                 ->join('usuarios u', 'u.id = p.id_cajero', 'left')
                 ->orderBy('p.created_at', 'DESC')
                 ->limit(10)
@@ -288,14 +315,14 @@ class AdminController extends BaseController
 
             // Actividad reciente unificada
             $rawAlumnos = $db->table('pagos p')
-                ->select('p.id, p.folio_digital, p.nombre_alumno AS nombre, p.concepto, p.detalle_tramite, p.nivel, p.modalidad, p.monto, p.created_at')
+                ->select('p.id, p.folio_digital, p.nombre_alumno AS nombre, p.concepto, p.detalle_tramite, p.nivel, p.modalidad, p.monto, p.metodo_pago, p.created_at')
                 ->where('p.id_cajero', $idUsuario)
                 ->orderBy('p.created_at', 'DESC')
                 ->limit(15)
                 ->get()->getResultArray();
 
             $rawExternos = $db->table('pagos_externos pe')
-                ->select('pe.id, pe.folio_digital, pe.nombre_cliente AS nombre, pe.concepto, pe.monto, pe.created_at')
+                ->select('pe.id, pe.folio_digital, pe.nombre_cliente AS nombre, pe.concepto, pe.monto, pe.metodo_pago, pe.created_at')
                 ->where('pe.id_cajero', $idUsuario)
                 ->orderBy('pe.created_at', 'DESC')
                 ->limit(15)

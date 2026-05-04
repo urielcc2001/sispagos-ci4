@@ -31,6 +31,13 @@
       </div>
     <?php endif; ?>
 
+    <?php if ($rol === 'cajero'): ?>
+      <div class="alert alert-info">
+        <i class="fas fa-lock mr-2"></i>
+        Estás viendo únicamente tus propios registros.
+      </div>
+    <?php endif; ?>
+
     <?php
     $conceptoLabels = [
         'inscripcion'   => 'Inscripción',
@@ -102,6 +109,7 @@
               </div>
             </div>
 
+            <?php if ($rol === 'admin'): ?>
             <div class="col-md-2">
               <div class="form-group mb-0">
                 <label class="text-xs text-uppercase text-muted font-weight-bold">Cajero</label>
@@ -116,6 +124,7 @@
                 </select>
               </div>
             </div>
+            <?php endif; ?>
 
             <div class="col-md-2">
               <div class="form-group mb-0">
@@ -125,6 +134,17 @@
                   <option value="uni"      <?= ($filtros['nivel'] ?? '') === 'uni'      ? 'selected' : '' ?>>Universidad</option>
                   <option value="prepa"    <?= ($filtros['nivel'] ?? '') === 'prepa'    ? 'selected' : '' ?>>Bachillerato</option>
                   <option value="posgrado" <?= ($filtros['nivel'] ?? '') === 'posgrado' ? 'selected' : '' ?>>Posgrado</option>
+                </select>
+              </div>
+            </div>
+
+            <div class="col-md-2">
+              <div class="form-group mb-0">
+                <label class="text-xs text-uppercase text-muted font-weight-bold">Método de Pago</label>
+                <select name="metodo_pago" class="form-control form-control-sm">
+                  <option value="">— Todos —</option>
+                  <option value="Efectivo"      <?= ($filtros['metodoPago'] ?? '') === 'Efectivo'      ? 'selected' : '' ?>>Efectivo</option>
+                  <option value="Transferencia" <?= ($filtros['metodoPago'] ?? '') === 'Transferencia' ? 'selected' : '' ?>>Transferencia</option>
                 </select>
               </div>
             </div>
@@ -171,11 +191,11 @@
             <h3 style="font-size:2rem;">$<?= number_format((float) $totalGeneral, 2) ?></h3>
             <p>
               Total Recaudado en el Periodo
-              <?php if ($origenActual === '' && ($cntAlumnos > 0 || $cntExternos > 0)): ?>
+              <?php if ($totalGeneral > 0): ?>
                 <br><small style="font-size:0.75rem; opacity:0.85;">
-                  Alumnos: $<?= number_format($totalAlumnos, 2) ?>
+                  Efectivo: $<?= number_format((float) $totalEfectivo, 2) ?>
                   &nbsp;|&nbsp;
-                  Externos: $<?= number_format($totalExternos, 2) ?>
+                  Transferencia: $<?= number_format((float) $totalTransferencia, 2) ?>
                 </small>
               <?php endif; ?>
             </p>
@@ -208,9 +228,10 @@
         $exportParams = array_filter([
             'fecha_inicio' => $filtros['fechaInicio'] ?? '',
             'fecha_fin'    => $filtros['fechaFin']    ?? '',
-            'id_cajero'    => $filtros['idCajero']    ?? '',
+            'id_cajero'    => $rol === 'admin' ? ($filtros['idCajero'] ?? '') : '',
             'nivel'        => $filtros['nivel']       ?? '',
             'origen'       => $filtros['origen']      ?? '',
+            'metodo_pago'  => $filtros['metodoPago']  ?? '',
         ]);
         $exportQuery = $exportParams ? '?' . http_build_query($exportParams) : '';
         ?>
@@ -248,14 +269,15 @@
               <th>Nivel</th>
               <th>Concepto</th>
               <th>Cajero</th>
-              <th class="text-right">Monto</th>
+              <th class="text-right">Efectivo</th>
+              <th class="text-right">Transferencia</th>
               <th class="text-center">Acciones</th>
             </tr>
           </thead>
           <tbody>
             <?php if (empty($pagos)): ?>
               <tr>
-                <td colspan="9" class="text-center text-muted py-5">
+                <td colspan="10" class="text-center text-muted py-5">
                   <i class="fas fa-search fa-2x mb-2 d-block"></i>
                   No se encontraron pagos con los filtros seleccionados.
                 </td>
@@ -305,7 +327,10 @@
                 <td><?= esc($concepto) ?></td>
                 <td><?= esc($p['nombre_cajero'] ?? 'N/D') ?></td>
                 <td class="text-right font-weight-bold">
-                  $<?= number_format((float) $p['monto'], 2) ?>
+                  <?= ($p['metodo_pago'] ?? '') !== 'Transferencia' ? '$' . number_format((float) $p['monto'], 2) : '<span class="text-muted">—</span>' ?>
+                </td>
+                <td class="text-right font-weight-bold">
+                  <?= ($p['metodo_pago'] ?? '') === 'Transferencia' ? '$' . number_format((float) $p['monto'], 2) : '<span class="text-muted">—</span>' ?>
                 </td>
                 <td class="text-center text-nowrap">
                   <?php if ($p['tipo_pago'] === 'alumno'): ?>
@@ -317,6 +342,7 @@
                         <i class="fas fa-print"></i>
                       </a>
                     <?php endif; ?>
+                    <?php if ($rol === 'admin'): ?>
                     <a href="<?= base_url('admin/pagos/' . $p['id'] . '/editar') ?>"
                        class="btn btn-xs btn-outline-warning"
                        title="Editar pago">
@@ -329,6 +355,7 @@
                             title="Eliminar pago">
                       <i class="fas fa-trash-alt"></i>
                     </button>
+                    <?php endif; ?>
                   <?php else: ?>
                     <?php if (! empty($p['folio_digital'])): ?>
                       <a href="<?= base_url('pagos-externos/comprobante/' . esc($p['folio_digital'])) ?>"
@@ -338,6 +365,7 @@
                         <i class="fas fa-print"></i>
                       </a>
                     <?php endif; ?>
+                    <?php if ($rol === 'admin'): ?>
                     <a href="<?= base_url('admin/pagos-externos/' . $p['id'] . '/editar') ?>"
                        class="btn btn-xs btn-outline-warning"
                        title="Editar">
@@ -350,13 +378,26 @@
                             title="Eliminar">
                       <i class="fas fa-trash-alt"></i>
                     </button>
+                    <?php endif; ?>
                   <?php endif; ?>
                 </td>
               </tr>
               <?php endforeach; ?>
-              <tr class="table-success font-weight-bold">
-                <td colspan="7" class="text-right">Total General:</td>
-                <td class="text-right">$<?= number_format((float) $totalGeneral, 2) ?></td>
+              <tr class="font-weight-bold" style="background:#d4edda;">
+                <td colspan="7" class="text-right">Total Efectivo:</td>
+                <td class="text-right text-success">$<?= number_format((float) $totalEfectivo, 2) ?></td>
+                <td class="text-right text-muted">—</td>
+                <td></td>
+              </tr>
+              <tr class="font-weight-bold" style="background:#d1ecf1;">
+                <td colspan="7" class="text-right">Total Transferencia:</td>
+                <td class="text-right text-muted">—</td>
+                <td class="text-right text-info">$<?= number_format((float) $totalTransferencia, 2) ?></td>
+                <td></td>
+              </tr>
+              <tr class="font-weight-bold" style="background:#003087; color:white;">
+                <td colspan="7" class="text-right">TOTAL:</td>
+                <td colspan="2" class="text-right" style="font-size:1.05rem;">$<?= number_format((float) $totalGeneral, 2) ?></td>
                 <td></td>
               </tr>
             <?php endif; ?>

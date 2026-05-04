@@ -34,15 +34,15 @@ $ruta = uri_string();
           </a>
         </li>
 
-        <?php if ($rol === 'admin'): ?>
         <li class="nav-item">
           <a href="<?= base_url('admin/reportes') ?>"
-             class="nav-link <?= (strpos($ruta, 'admin/reportes') === 0 || strpos($ruta, 'admin/pagos') === 0 || strpos($ruta, 'admin/exportar') === 0) ? 'active' : '' ?>">
+             class="nav-link <?= (strpos($ruta, 'admin/reportes') === 0 || strpos($ruta, 'admin/exportar') === 0) ? 'active' : '' ?>">
             <i class="nav-icon fas fa-chart-bar"></i>
-            <p>Reportes</p>
+            <p><?= $rol === 'cajero' ? 'Mis Reportes' : 'Reportes' ?></p>
           </a>
         </li>
 
+        <?php if ($rol === 'admin'): ?>
         <li class="nav-item">
           <a href="<?= base_url('admin/conceptos') ?>"
              class="nav-link <?= strpos($ruta, 'admin/conceptos') === 0 ? 'active' : '' ?>">

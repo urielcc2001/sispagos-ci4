@@ -100,11 +100,12 @@
             <table class="table table-striped table-hover table-sm mb-0">
               <thead class="thead-light">
                 <tr>
-                  <th style="width:17%">Folio</th>
-                  <th style="width:12%">Fecha / Hora</th>
+                  <th style="width:16%">Folio</th>
+                  <th style="width:11%">Fecha / Hora</th>
                   <th>Nombre</th>
-                  <th style="width:18%">Concepto</th>
-                  <th class="text-right" style="width:9%">Monto</th>
+                  <th style="width:14%">Concepto</th>
+                  <th class="text-right" style="width:9%">Efectivo</th>
+                  <th class="text-right" style="width:9%">Transferencia</th>
                   <th class="text-center" style="width:7%">Tipo</th>
                   <th class="text-center" style="width:7%">Acción</th>
                 </tr>
@@ -112,7 +113,7 @@
               <tbody>
                 <?php if (empty($actividadReciente)): ?>
                 <tr>
-                  <td colspan="7" class="text-center text-muted py-4">
+                  <td colspan="8" class="text-center text-muted py-4">
                     <i class="fas fa-inbox fa-2x mb-2 d-block"></i>
                     No has registrado pagos aún.
                   </td>
@@ -153,7 +154,10 @@
                   <td><?= esc($a['nombre'] ?? '—') ?></td>
                   <td><?= esc($concepto) ?></td>
                   <td class="text-right font-weight-bold">
-                    $<?= number_format((float) $a['monto'], 2) ?>
+                    <?= ($a['metodo_pago'] ?? '') !== 'Transferencia' ? '$' . number_format((float) $a['monto'], 2) : '<span class="text-muted">—</span>' ?>
+                  </td>
+                  <td class="text-right font-weight-bold">
+                    <?= ($a['metodo_pago'] ?? '') === 'Transferencia' ? '$' . number_format((float) $a['monto'], 2) : '<span class="text-muted">—</span>' ?>
                   </td>
                   <td class="text-center">
                     <?php if ($a['tipo_pago'] === 'alumno'): ?>
@@ -196,20 +200,22 @@
           <div class="card-body p-0">
             <table class="table table-striped table-hover table-sm mb-0">
               <colgroup>
-                <col style="width:17%">
+                <col style="width:16%">
                 <col>
                 <col style="width:12%">
+                <col style="width:8%">
+                <col style="width:8%">
                 <col style="width:9%">
                 <col style="width:10%">
-                <col style="width:11%">
-                <col style="width:9%">
+                <col style="width:8%">
               </colgroup>
               <thead class="thead-light">
                 <tr>
                   <th>Folio</th>
                   <th>Alumno</th>
                   <th>Concepto</th>
-                  <th class="text-right">Monto</th>
+                  <th class="text-right">Efectivo</th>
+                  <th class="text-right">Transferencia</th>
                   <th>Cajero</th>
                   <th>Fecha / Hora</th>
                   <th class="text-center">Acción</th>
@@ -218,7 +224,7 @@
               <tbody>
                 <?php if (empty($pagosRecientes)): ?>
                   <tr>
-                    <td colspan="7" class="text-center text-muted py-4">
+                    <td colspan="8" class="text-center text-muted py-4">
                       <i class="fas fa-inbox fa-2x mb-2 d-block"></i>
                       No hay pagos registrados aún.
                     </td>
@@ -258,7 +264,10 @@
                   <td><?= esc($p['nombre_alumno']) ?></td>
                   <td><?= esc($concepto) ?></td>
                   <td class="text-right font-weight-bold">
-                    $<?= number_format((float) $p['monto'], 2) ?>
+                    <?= ($p['metodo_pago'] ?? '') !== 'Transferencia' ? '$' . number_format((float) $p['monto'], 2) : '<span class="text-muted">—</span>' ?>
+                  </td>
+                  <td class="text-right font-weight-bold">
+                    <?= ($p['metodo_pago'] ?? '') === 'Transferencia' ? '$' . number_format((float) $p['monto'], 2) : '<span class="text-muted">—</span>' ?>
                   </td>
                   <td><?= esc($p['nombre_cajero'] ?? 'N/D') ?></td>
                   <td class="text-nowrap text-muted" style="font-size:0.82rem;">
@@ -309,20 +318,22 @@
           <div class="card-body p-0">
             <table class="table table-striped table-hover table-sm mb-0">
               <colgroup>
-                <col style="width:17%">
+                <col style="width:16%">
                 <col>
                 <col style="width:12%">
+                <col style="width:8%">
+                <col style="width:8%">
                 <col style="width:9%">
                 <col style="width:10%">
-                <col style="width:11%">
-                <col style="width:9%">
+                <col style="width:8%">
               </colgroup>
               <thead class="thead-light">
                 <tr>
                   <th>Folio</th>
                   <th>Cliente / Aspirante</th>
                   <th>Concepto</th>
-                  <th class="text-right">Monto</th>
+                  <th class="text-right">Efectivo</th>
+                  <th class="text-right">Transferencia</th>
                   <th>Cajero</th>
                   <th>Fecha / Hora</th>
                   <th class="text-center">Acción</th>
@@ -331,7 +342,7 @@
               <tbody>
                 <?php if (empty($externosRecientes)): ?>
                   <tr>
-                    <td colspan="7" class="text-center text-muted py-4">
+                    <td colspan="8" class="text-center text-muted py-4">
                       <i class="fas fa-inbox fa-2x mb-2 d-block"></i>
                       No hay pagos externos registrados aún.
                     </td>
@@ -347,7 +358,10 @@
                   <td><?= esc($e['nombre_cliente']) ?></td>
                   <td><?= esc($e['concepto']) ?></td>
                   <td class="text-right font-weight-bold">
-                    $<?= number_format((float) $e['monto'], 2) ?>
+                    <?= ($e['metodo_pago'] ?? '') !== 'Transferencia' ? '$' . number_format((float) $e['monto'], 2) : '<span class="text-muted">—</span>' ?>
+                  </td>
+                  <td class="text-right font-weight-bold">
+                    <?= ($e['metodo_pago'] ?? '') === 'Transferencia' ? '$' . number_format((float) $e['monto'], 2) : '<span class="text-muted">—</span>' ?>
                   </td>
                   <td><?= esc($e['nombre_cajero'] ?? 'N/D') ?></td>
                   <td class="text-nowrap text-muted" style="font-size:0.82rem;">
