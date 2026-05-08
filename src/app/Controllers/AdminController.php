@@ -63,7 +63,7 @@ class AdminController extends BaseController
 
         if ($origen !== 'externos') {
             $b = $db->table('pagos p')
-                ->select('p.id, p.folio_digital, p.num_control, p.nombre_alumno AS nombre, p.concepto, p.detalle_tramite, p.nivel, p.modalidad, p.monto, p.metodo_pago, p.created_at, u.nombre AS nombre_cajero')
+                ->select('p.id, p.folio_digital, p.num_control, p.nombre_alumno AS nombre, p.concepto, p.detalle_tramite, p.nivel, p.modalidad, p.monto, p.metodo_pago, p.observaciones, p.created_at, u.nombre AS nombre_cajero')
                 ->join('usuarios u', 'u.id = p.id_cajero', 'left');
             if ($fechaInicio) $b->where('DATE(p.created_at) >=', $fechaInicio);
             if ($fechaFin)    $b->where('DATE(p.created_at) <=', $fechaFin);
@@ -78,7 +78,7 @@ class AdminController extends BaseController
 
         if ($origen !== 'alumnos') {
             $b = $db->table('pagos_externos pe')
-                ->select('pe.id, pe.folio_digital, pe.nombre_cliente AS nombre, pe.concepto, pe.nivel, pe.monto, pe.metodo_pago, pe.created_at, u.nombre AS nombre_cajero')
+                ->select('pe.id, pe.folio_digital, pe.nombre_cliente AS nombre, pe.concepto, pe.nivel, pe.monto, pe.metodo_pago, pe.observaciones, pe.created_at, u.nombre AS nombre_cajero')
                 ->join('usuarios u', 'u.id = pe.id_cajero', 'left');
             if ($fechaInicio) $b->where('DATE(pe.created_at) >=', $fechaInicio);
             if ($fechaFin)    $b->where('DATE(pe.created_at) <=', $fechaFin);
@@ -444,11 +444,12 @@ class AdminController extends BaseController
             'anios'           => [],
             'inscripciones'   => [],
             'pagos_otros'     => [],
-            'totales'         => null,
-            'directa_anio'    => false,
-            'periodo_actual'  => null,
-            'es_posgrado'     => ($nivel === 'posgrado'),
-            'materias_estado' => [],
+            'totales'              => null,
+            'directa_anio'         => false,
+            'periodo_actual'       => null,
+            'es_posgrado'          => ($nivel === 'posgrado'),
+            'materias_estado'      => [],
+            'pagos_detalle_meses'  => [],
         ];
 
         if ($numControl && $nivel) {
@@ -499,9 +500,10 @@ class AdminController extends BaseController
                 }
             }
 
-            $data['estado']         = $model->getEstadoCuentaMensual($numControl, $nivel, $anio);
-            $data['info_alumno']    = $model->getInfoAlumno($numControl, $nivel);
-            $data['anios']          = $model->getAniosConPagos($numControl, $nivel);
+            $data['estado']                = $model->getEstadoCuentaMensual($numControl, $nivel, $anio);
+            $data['pagos_detalle_meses']   = $model->getPagosDetallePorMes($numControl, $nivel, $anio);
+            $data['info_alumno']           = $model->getInfoAlumno($numControl, $nivel);
+            $data['anios']                 = $model->getAniosConPagos($numControl, $nivel);
             $data['inscripciones']  = $model->getInscripciones($numControl, $nivel);
             $data['pagos_otros']    = $model->getPagosOtros($numControl, $nivel);
             $data['totales']        = $model->getTotalesPagado($numControl, $nivel);

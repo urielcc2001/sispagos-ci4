@@ -86,16 +86,17 @@ class AdeudoModel
     }
 
     // ── Mensualidades pagadas (como claves "YYYY-MM") ────────────────
+    // Usa anio_mensualidad cuando está disponible; si no, cae en YEAR(fecha_pago_real).
 
     public function getPagadosYearMonth(string $numControl, string $nivel): array
     {
         $db   = \Config\Database::connect();
         $rows = $db->table('pagos')
-            ->select('YEAR(fecha_pago_real) AS anio, periodo_pago AS mes')
+            ->select('COALESCE(anio_mensualidad, YEAR(fecha_pago_real)) AS anio, periodo_pago AS mes')
             ->where('num_control', $numControl)
             ->where('nivel', $nivel)
             ->where('concepto', 'mensualidad')
-            ->where('fecha_pago_real IS NOT NULL', null, false)
+            ->where('(fecha_pago_real IS NOT NULL OR anio_mensualidad IS NOT NULL)', null, false)
             ->get()
             ->getResultArray();
 
@@ -105,29 +106,74 @@ class AdeudoModel
         );
     }
 
-    // ── Mensualidades pagadas con folio (mapa "YYYY-MM" → folio_digital) ─
+    // ── Mensualidades pagadas con folio (mapa "YYYY-MM" → ['folio', 'tiene_completo']) ─
+    // tiene_completo = true si existe al menos un registro sin num_abono (pago total).
+    // tiene_completo = false = solo abonos parciales registrados para ese mes.
 
     private function getPagadosData(string $numControl, string $nivel): array
     {
         $db   = \Config\Database::connect();
         $rows = $db->table('pagos')
-            ->select('folio_digital, YEAR(fecha_pago_real) AS anio, periodo_pago AS mes')
+            ->select('
+                MAX(folio_digital) AS folio_digital,
+                COALESCE(anio_mensualidad, YEAR(fecha_pago_real)) AS anio,
+                periodo_pago AS mes,
+                MAX(num_abono IS NULL) AS tiene_completo,
+                SUM(num_abono IS NOT NULL) AS num_abonos_pagados
+            ')
             ->where('num_control', $numControl)
             ->where('nivel', $nivel)
             ->where('concepto', 'mensualidad')
-            ->where('fecha_pago_real IS NOT NULL', null, false)
+            ->where('(fecha_pago_real IS NOT NULL OR anio_mensualidad IS NOT NULL)', null, false)
+            ->groupBy('anio, mes')
             ->get()
             ->getResultArray();
 
         $map = [];
         foreach ($rows as $r) {
-            $key        = $r['anio'] . '-' . str_pad($r['mes'], 2, '0', STR_PAD_LEFT);
-            $map[$key]  = $r['folio_digital'];
+            $key       = $r['anio'] . '-' . str_pad($r['mes'], 2, '0', STR_PAD_LEFT);
+            $map[$key] = [
+                'folio'          => $r['folio_digital'],
+                'tiene_completo' => (bool)(int)$r['tiene_completo'],
+                'num_abonos'     => (int)$r['num_abonos_pagados'],
+            ];
         }
         return $map;
     }
 
     // ── Estado de cuenta: 12 meses de un año con status ─────────────
+    // Devuelve todos los registros individuales de mensualidad de un año,
+    // indexados por clave "YYYY-MM", para mostrar detalle de abonos en modal.
+    public function getPagosDetallePorMes(string $numControl, string $nivel, int $anio): array
+    {
+        $db   = \Config\Database::connect();
+        $rows = $db->table('pagos')
+            ->select('folio_digital, monto, num_abono, created_at, fecha_pago_real, periodo_pago, anio_mensualidad, metodo_pago')
+            ->where('num_control', $numControl)
+            ->where('nivel', $nivel)
+            ->where('concepto', 'mensualidad')
+            ->where("COALESCE(anio_mensualidad, YEAR(COALESCE(fecha_pago_real, created_at))) = {$anio}", null, false)
+            ->orderBy('periodo_pago', 'ASC')
+            ->orderBy('num_abono', 'ASC')
+            ->get()
+            ->getResultArray();
+
+        $map = [];
+        foreach ($rows as $r) {
+            $anioR = $r['anio_mensualidad']
+                ?? date('Y', strtotime($r['fecha_pago_real'] ?? $r['created_at']));
+            $key = $anioR . '-' . str_pad((int) $r['periodo_pago'], 2, '0', STR_PAD_LEFT);
+            $map[$key][] = [
+                'folio'        => $r['folio_digital'],
+                'monto'        => (float) $r['monto'],
+                'num_abono'    => $r['num_abono'] !== null ? (int) $r['num_abono'] : null,
+                'fecha'        => substr($r['fecha_pago_real'] ?? $r['created_at'], 0, 10),
+                'metodo_pago'  => $r['metodo_pago'] ?? 'Efectivo',
+            ];
+        }
+        return $map;
+    }
+
     //   'pagado' | 'pendiente' | 'futuro' | 'na' (fuera del ciclo o sin historial)
 
     public function getEstadoCuentaMensual(string $numControl, string $nivel, int $anio): array
@@ -163,13 +209,13 @@ class AdeudoModel
 
             // Modo con ancla: meses anteriores al inicio del ciclo → na
             if (! $directa && ($anio < $inscAnio || ($anio === $inscAnio && $inscMes !== null && $mes < $inscMes))) {
-                $estado[] = ['mes' => $mes, 'nombre' => self::$meses[$mes], 'status' => 'na', 'folio_digital' => null];
+                $estado[] = ['mes' => $mes, 'nombre' => self::$meses[$mes], 'status' => 'na', 'folio_digital' => null, 'abonos' => 0];
                 continue;
             }
 
             // Modo directa: meses antes del primer pago del año → na
             if ($directa && $primerMesPagado !== null && $mes < $primerMesPagado) {
-                $estado[] = ['mes' => $mes, 'nombre' => self::$meses[$mes], 'status' => 'na', 'folio_digital' => null];
+                $estado[] = ['mes' => $mes, 'nombre' => self::$meses[$mes], 'status' => 'na', 'folio_digital' => null, 'abonos' => 0];
                 continue;
             }
 
@@ -181,6 +227,7 @@ class AdeudoModel
                     'nombre'        => self::$meses[$mes],
                     'status'        => $esPasado ? 'na' : 'futuro',
                     'folio_digital' => null,
+                    'abonos'        => 0,
                 ];
                 continue;
             }
@@ -188,17 +235,21 @@ class AdeudoModel
             $key = $anio . '-' . str_pad($mes, 2, '0', STR_PAD_LEFT);
 
             if (isset($pagadosData[$key])) {
-                $status       = 'pagado';
-                $folioDigital = $pagadosData[$key];
+                $data         = $pagadosData[$key];
+                $status       = $data['tiene_completo'] ? 'pagado' : 'parcial';
+                $folioDigital = $data['folio'];
+                $numAbonos    = $data['tiene_completo'] ? 0 : $data['num_abonos'];
             } elseif ($anio < $anioHoy || ($anio === $anioHoy && $mes <= $mesHoy)) {
                 $status       = 'pendiente';
                 $folioDigital = null;
+                $numAbonos    = 0;
             } else {
                 $status       = 'futuro';
                 $folioDigital = null;
+                $numAbonos    = 0;
             }
 
-            $estado[] = ['mes' => $mes, 'nombre' => self::$meses[$mes], 'status' => $status, 'folio_digital' => $folioDigital];
+            $estado[] = ['mes' => $mes, 'nombre' => self::$meses[$mes], 'status' => $status, 'folio_digital' => $folioDigital, 'abonos' => $numAbonos];
         }
 
         return $estado;
@@ -354,16 +405,23 @@ class AdeudoModel
         ];
     }
 
-    // ── Estado de meses para ventanilla de cobro (año actual) ──────────
-    //   Ancla: reinscripción del año vigente → inscripción del año vigente → modo directo.
+    // ── Estado de meses para ventanilla de cobro ─────────────────────────
+    //   Acepta un año específico (0 = año actual) para cobrar adeudos pasados.
+    //   Ancla: reinscripción del año → inscripción del año → modo directo.
+    //   Devuelve status: 'pagado' | 'parcial' | 'pendiente' | 'futuro' | 'na'
 
-    public function getEstadoMensualParaCobro(string $numControl, string $nivel): array
+    public function getEstadoMensualParaCobro(string $numControl, string $nivel, int $anio = 0): array
     {
-        $anio   = (int) date('Y');
-        $mesHoy = (int) date('n');
-        $db     = \Config\Database::connect();
+        $anioHoy = (int) date('Y');
+        $mesHoy  = (int) date('n');
 
-        // 1. Reinscripción del año vigente (ancla más específica)
+        if ($anio === 0) {
+            $anio = $anioHoy;
+        }
+
+        $db = \Config\Database::connect();
+
+        // 1. Reinscripción del año solicitado (ancla más específica)
         $pagoInicial = $db->table('pagos')
             ->where('num_control', $numControl)
             ->where('nivel', $nivel)
@@ -373,7 +431,7 @@ class AdeudoModel
             ->limit(1)
             ->get()->getRowArray();
 
-        // 2. Inscripción del año vigente (respaldo)
+        // 2. Inscripción del año solicitado (respaldo)
         if (! $pagoInicial) {
             $pagoInicial = $db->table('pagos')
                 ->where('num_control', $numControl)
@@ -401,39 +459,37 @@ class AdeudoModel
         }
 
         $pagadosData = $this->getPagadosData($numControl, $nivel);
+        $detalleMap  = $this->getPagosDetallePorMes($numControl, $nivel, $anio);
         $meses       = [];
 
         for ($mes = 1; $mes <= 12; $mes++) {
-            // Meses anteriores al ancla → no aplica para este ciclo
+            // Meses anteriores al ancla del ciclo → no aplica
             if (! $directa && ($anio < $anioAncla || ($anio === $anioAncla && $mesAncla !== null && $mes < $mesAncla))) {
-                $meses[] = [
-                    'mes'           => $mes,
-                    'nombre'        => self::$meses[$mes],
-                    'status'        => 'na',
-                    'folio_digital' => null,
-                ];
+                $meses[] = ['mes' => $mes, 'nombre' => self::$meses[$mes], 'status' => 'na', 'folio_digital' => null, 'abonos' => 0, 'abonos_detalle' => []];
                 continue;
             }
 
             $key = $anio . '-' . str_pad($mes, 2, '0', STR_PAD_LEFT);
 
             if (isset($pagadosData[$key])) {
-                $status = 'pagado';
-                $folio  = $pagadosData[$key];
-            } elseif ($mes <= $mesHoy) {
-                $status = 'pendiente';
-                $folio  = null;
+                // 'pagado' = tiene al menos un pago completo; 'parcial' = solo abonos
+                $status     = $pagadosData[$key]['tiene_completo'] ? 'pagado' : 'parcial';
+                $folio      = $pagadosData[$key]['folio'];
+                $numAbonos  = $pagadosData[$key]['tiene_completo'] ? 0 : $pagadosData[$key]['num_abonos'];
+                $detalle    = $status === 'parcial' ? ($detalleMap[$key] ?? []) : [];
+            } elseif ($anio < $anioHoy || ($anio === $anioHoy && $mes <= $mesHoy)) {
+                $status    = 'pendiente';
+                $folio     = null;
+                $numAbonos = 0;
+                $detalle   = [];
             } else {
-                $status = 'futuro';
-                $folio  = null;
+                $status    = 'futuro';
+                $folio     = null;
+                $numAbonos = 0;
+                $detalle   = [];
             }
 
-            $meses[] = [
-                'mes'           => $mes,
-                'nombre'        => self::$meses[$mes],
-                'status'        => $status,
-                'folio_digital' => $folio,
-            ];
+            $meses[] = ['mes' => $mes, 'nombre' => self::$meses[$mes], 'status' => $status, 'folio_digital' => $folio, 'abonos' => $numAbonos, 'abonos_detalle' => $detalle];
         }
 
         return [

@@ -45,17 +45,18 @@ class PagosController extends BaseController
 
         $numControl = trim($this->request->getGet('num_control') ?? '');
         $nivel      = $this->request->getGet('nivel') ?? '';
+        $anio       = (int) ($this->request->getGet('anio') ?: 0);
 
         if (! $numControl || ! $nivel || $nivel === 'posgrado') {
             return $this->response->setJSON(['meses' => [], 'directa' => false]);
         }
 
         $model  = new \App\Models\AdeudoModel();
-        $result = $model->getEstadoMensualParaCobro($numControl, $nivel);
+        $result = $model->getEstadoMensualParaCobro($numControl, $nivel, $anio);
 
         return $this->response->setJSON([
             'meses'     => $result['meses'],
-            'anio'      => (int) date('Y'),
+            'anio'      => $anio ?: (int) date('Y'),
             'directa'   => $result['directa'],
             'mes_ancla' => $result['mes_ancla'],
         ]);
@@ -329,19 +330,26 @@ class PagosController extends BaseController
         }
 
         $concepto      = $this->request->getPost('concepto');
-        $periodoNum    = $this->request->getPost('periodo_pago')    ?: null;
         $tipoPeriodo   = $this->request->getPost('tipo_periodo')    ?: null;
         $fechaPagoReal = $this->request->getPost('fecha_pago_real') ?: null;
+        $mesesPago     = $this->request->getPost('meses_pago')      ?? [];
 
         if ($concepto !== 'mensualidad') {
             $fechaPagoReal = null;
         }
 
+        // ── Ruta de mensualidad multi-mes (nueva) ───────────────────
+        if ($concepto === 'mensualidad' && ! empty($mesesPago)) {
+            return $this->registrarMensualidades($mesesPago, $fechaPagoReal);
+        }
+
+        // ── Ruta existente (inscripcion, reinscripcion, tramite, mensualidad legacy) ─
+        $periodoNum = $this->request->getPost('periodo_pago') ?: null;
+
         $errorValidacion = $this->validarSecuenciaPago(
             $concepto,
             $this->request->getPost('num_control'),
             $this->request->getPost('nivel'),
-            $periodoNum,
             $fechaPagoReal
         );
         if ($errorValidacion) {
@@ -355,18 +363,18 @@ class PagosController extends BaseController
         }
 
         $data = [
-            'num_control'     => $this->request->getPost('num_control'),
-            'nivel'           => $this->request->getPost('nivel'),
-            'nombre_alumno'   => $this->request->getPost('nombre_alumno'),
-            'modalidad'       => $this->request->getPost('modalidad') ?: null,
-            'carrera'         => $this->request->getPost('carrera') ?: null,
-            'concepto'        => $concepto,
-            'detalle_tramite' => $this->request->getPost('detalle_tramite') ?: null,
-            'periodo_pago'    => $periodoNum !== null ? (int) $periodoNum : null,
-            'tipo_periodo'    => $tipoPeriodo,
-            'fecha_pago_real' => $fechaPagoReal,
-            'monto'           => $this->request->getPost('monto'),
-            'id_cajero'       => service('session')->get('id_usuario'),
+            'num_control'      => $this->request->getPost('num_control'),
+            'nivel'            => $this->request->getPost('nivel'),
+            'nombre_alumno'    => $this->request->getPost('nombre_alumno'),
+            'modalidad'        => $this->request->getPost('modalidad') ?: null,
+            'carrera'          => $this->request->getPost('carrera') ?: null,
+            'concepto'         => $concepto,
+            'detalle_tramite'  => $this->request->getPost('detalle_tramite') ?: null,
+            'periodo_pago'     => $periodoNum !== null ? (int) $periodoNum : null,
+            'tipo_periodo'     => $tipoPeriodo,
+            'fecha_pago_real'  => $fechaPagoReal,
+            'monto'            => $this->request->getPost('monto'),
+            'id_cajero'        => service('session')->get('id_usuario'),
             'metodo_pago'      => $this->request->getPost('metodo_pago') ?: 'Efectivo',
             'observaciones'    => $this->request->getPost('observaciones') ?: null,
             'mes_inicio_ciclo' => in_array($concepto, ['inscripcion', 'reinscripcion'])
@@ -407,6 +415,123 @@ class PagosController extends BaseController
         }
 
         return redirect()->to(base_url('pagos/comprobante/' . $folioDigital));
+    }
+
+    // ── Registro multi-mes: crea un registro por cada mes seleccionado ─
+
+    private function registrarMensualidades(array $mesesPago, ?string $fechaPagoReal): \CodeIgniter\HTTP\ResponseInterface
+    {
+        $numControl      = $this->request->getPost('num_control');
+        $nivel           = $this->request->getPost('nivel');
+        $anioMensualidad = (int) ($this->request->getPost('anio_mensualidad') ?: date('Y'));
+        $numAbono        = $this->request->getPost('num_abono') ? (int) $this->request->getPost('num_abono') : null;
+        $monto           = $this->request->getPost('monto');
+        $montosPago      = $this->request->getPost('montos_pago') ?? [];
+
+        // Validar que ningún mes seleccionado tenga ya un pago completo
+        $db = \Config\Database::connect();
+        $mesesNombres = ['Enero','Febrero','Marzo','Abril','Mayo','Junio',
+                         'Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
+
+        foreach ($mesesPago as $mes) {
+            $mes = (int) $mes;
+
+            // Solo bloquear duplicado cuando es pago completo (sin abono)
+            if ($numAbono === null) {
+                $existe = $db->table('pagos')
+                    ->where('num_control', $numControl)
+                    ->where('nivel', $nivel)
+                    ->where('concepto', 'mensualidad')
+                    ->where('periodo_pago', $mes)
+                    ->where('num_abono IS NULL', null, false)
+                    ->where("COALESCE(anio_mensualidad, YEAR(fecha_pago_real)) = {$anioMensualidad}", null, false)
+                    ->countAllResults();
+
+                if ($existe > 0) {
+                    $nomMes = $mesesNombres[$mes - 1] ?? "Mes {$mes}";
+                    if ($this->request->isAJAX()) {
+                        return $this->response->setStatusCode(422)->setJSON([
+                            'success' => false,
+                            'message' => "{$nomMes} {$anioMensualidad} ya tiene un pago completo registrado.",
+                        ]);
+                    }
+                    session()->setFlashdata('error', "{$nomMes} {$anioMensualidad} ya tiene un pago completo registrado.");
+                    return redirect()->to(base_url('pagos'));
+                }
+            }
+        }
+
+        $model      = new PagoModel();
+        $folioLote  = count($mesesPago) > 1
+            ? 'L' . date('Ymd') . strtoupper(substr(bin2hex(random_bytes(4)), 0, 8))
+            : null;
+
+        $baseData = [
+            'num_control'      => $numControl,
+            'nivel'            => $nivel,
+            'nombre_alumno'    => $this->request->getPost('nombre_alumno'),
+            'modalidad'        => $this->request->getPost('modalidad') ?: null,
+            'carrera'          => $this->request->getPost('carrera') ?: null,
+            'concepto'         => 'mensualidad',
+            'detalle_tramite'  => null,
+            'tipo_periodo'     => null,
+            'fecha_pago_real'  => $fechaPagoReal,
+            'anio_mensualidad' => $anioMensualidad,
+            'num_abono'        => $numAbono,
+            'id_cajero'        => service('session')->get('id_usuario'),
+            'metodo_pago'      => $this->request->getPost('metodo_pago') ?: 'Efectivo',
+            'observaciones'    => $this->request->getPost('observaciones') ?: null,
+            'mes_inicio_ciclo' => null,
+            'folio_lote'       => $folioLote,
+        ];
+
+        $primerFolio = null;
+
+        foreach ($mesesPago as $i => $mes) {
+            $montoMes = isset($montosPago[$i]) && $montosPago[$i] !== ''
+                ? (float) $montosPago[$i]
+                : (float) $monto;
+            $data = array_merge($baseData, ['periodo_pago' => (int) $mes, 'monto' => $montoMes]);
+
+            if (! $model->insert($data)) {
+                if ($this->request->isAJAX()) {
+                    return $this->response->setStatusCode(422)->setJSON([
+                        'success' => false,
+                        'message' => 'Error al guardar el pago. Intente de nuevo.',
+                    ]);
+                }
+                session()->setFlashdata('error', 'Error al guardar el pago. Intente de nuevo.');
+                return redirect()->to(base_url('pagos'));
+            }
+
+            $insertId     = $model->getInsertID();
+            $inserted     = $model->find($insertId);
+            $folio        = date('Ymd') . '-' . $insertId . '-' . strtoupper(substr(bin2hex(random_bytes(3)), 0, 6));
+            $sello        = hash('sha256', $folio . $inserted['created_at'] . 'LLAVE_SECRETA');
+
+            $model->update($insertId, ['folio_digital' => $folio, 'sello_digital' => $sello]);
+
+            if ($primerFolio === null) {
+                $primerFolio = $folio;
+            }
+        }
+
+        $pdfUrl = $folioLote !== null
+            ? base_url('pagos/comprobante-lote/' . $folioLote)
+            : base_url('pagos/comprobante/' . $primerFolio);
+
+        if ($this->request->isAJAX()) {
+            return $this->response->setJSON([
+                'success'       => true,
+                'folio_digital' => $primerFolio,
+                'folio_lote'    => $folioLote,
+                'pdf_url'       => $pdfUrl,
+                'csrf_name'     => csrf_token(),
+                'csrf_hash'     => csrf_hash(),
+            ]);
+        }
+
+        return redirect()->to($pdfUrl);
     }
 
     public function comprobante(string $folio)
@@ -463,8 +588,11 @@ class PagosController extends BaseController
 
             if ($pago['concepto'] === 'mensualidad') {
                 $mesNombre      = $mesesNombres[$num - 1] ?? '?';
-                $anio           = date('Y', strtotime($pago['created_at']));
+                $anio           = $pago['anio_mensualidad'] ?? date('Y', strtotime($pago['created_at']));
                 $periodoDisplay = $mesNombre . ' ' . $anio;
+                if (! empty($pago['num_abono'])) {
+                    $periodoDisplay .= ' — Abono ' . $pago['num_abono'];
+                }
             } elseif ($plan === 'Semestral') {
                 $rango          = ($num % 2 !== 0) ? 'Agosto - Diciembre' : 'Febrero - Julio';
                 $periodoDisplay = 'Semestre ' . $num . ' (' . $rango . ')';
@@ -523,13 +651,92 @@ class PagosController extends BaseController
             ->setBody($dompdf->output());
     }
 
+    // ── Comprobante multi-mes (lote) ─────────────────────────────────────────────
+
+    public function comprobanteLote(string $lote)
+    {
+        if (! service('session')->get('logged_in')) {
+            return redirect()->to(base_url('auth/login'));
+        }
+
+        $model = new PagoModel();
+        $pagos = $model
+            ->where('folio_lote', $lote)
+            ->orderBy('anio_mensualidad', 'ASC')
+            ->orderBy('periodo_pago', 'ASC')
+            ->findAll();
+
+        if (empty($pagos)) {
+            throw \CodeIgniter\Exceptions\PageNotFoundException::forPageNotFound("Lote no encontrado: {$lote}");
+        }
+
+        if (count($pagos) === 1) {
+            return $this->comprobante($pagos[0]['folio_digital']);
+        }
+
+        $pago   = $pagos[0];
+        $db     = \Config\Database::connect();
+        $cajero = $db->table('usuarios')
+                     ->select('nombre')
+                     ->where('id', $pago['id_cajero'])
+                     ->get()->getRowArray();
+
+        $mesesNombres = ['Enero','Febrero','Marzo','Abril','Mayo','Junio',
+                         'Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
+
+        $mesesDisplay = [];
+        $montoTotal   = 0;
+        foreach ($pagos as $p) {
+            $mesNom         = $mesesNombres[((int) $p['periodo_pago']) - 1] ?? '?';
+            $anioP          = $p['anio_mensualidad'] ?? date('Y', strtotime($p['created_at']));
+            $mesesDisplay[] = $mesNom . ' ' . $anioP;
+            $montoTotal    += (float) $p['monto'];
+        }
+
+        $niveles   = ['uni' => 'Universidad', 'prepa' => 'Preparatoria', 'posgrado' => 'Posgrado'];
+        $logoMap   = ['uni' => 'logosuni.jpeg', 'prepa' => 'logosba.jpeg', 'posgrado' => 'logosuni.jpeg'];
+        $logoFile  = FCPATH . 'assets/img/' . ($logoMap[$pago['nivel']] ?? '');
+        $logoBase64 = null;
+        if (file_exists($logoFile)) {
+            $ext        = pathinfo($logoFile, PATHINFO_EXTENSION);
+            $logoBase64 = 'data:image/' . $ext . ';base64,' . base64_encode(file_get_contents($logoFile));
+        }
+
+        $viewData = [
+            'pagos'         => $pagos,
+            'pago'          => $pago,
+            'mesesDisplay'  => implode(', ', $mesesDisplay),
+            'montoTotal'    => $montoTotal,
+            'nivelLabel'    => $niveles[$pago['nivel']] ?? $pago['nivel'],
+            'fechaHora'     => date('d/m/Y H:i:s', strtotime($pago['created_at'])),
+            'montoFormato'  => '$' . number_format($montoTotal, 2),
+            'montoLetras'   => $this->numeroALetras($montoTotal),
+            'nombreCajero'  => $cajero['nombre'] ?? 'N/D',
+            'logoBase64'    => $logoBase64,
+            'folio_lote'    => $lote,
+        ];
+
+        $options = new Options();
+        $options->set('defaultFont', 'Helvetica');
+        $options->set('isRemoteEnabled', true);
+
+        $dompdf = new Dompdf($options);
+        $dompdf->loadHtml(view('pagos/comprobante_lote_pdf', $viewData));
+        $dompdf->setPaper('letter', 'portrait');
+        $dompdf->render();
+
+        return $this->response
+            ->setHeader('Content-Type', 'application/pdf')
+            ->setHeader('Content-Disposition', 'inline; filename="comprobante-lote-' . $lote . '.pdf"')
+            ->setBody($dompdf->output());
+    }
+
     // ────────────────────────────────────────────────────────────────────────────
 
     private function validarSecuenciaPago(
         string  $concepto,
         ?string $numControl,
         ?string $nivel,
-        ?string $periodoNum,
         ?string $fechaPagoReal
     ): ?string {
         if (! $numControl || ! $nivel || ! $concepto) {

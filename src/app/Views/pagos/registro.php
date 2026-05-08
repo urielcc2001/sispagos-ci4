@@ -25,10 +25,10 @@
       </div>
     <?php endif; ?>
 
-    <?php if (isset($error)): ?>
+    <?php if (isset($error) || session()->getFlashdata('error')): ?>
       <div class="alert alert-danger alert-dismissible fade show">
         <button type="button" class="close" data-dismiss="alert">&times;</button>
-        <?= esc($error) ?>
+        <?= esc((string) ($error ?? session()->getFlashdata('error') ?? '')) ?>
       </div>
     <?php endif; ?>
 
@@ -202,7 +202,7 @@
 
             <div class="col-md-2">
               <div class="form-group">
-                <label for="monto">Monto <span class="text-danger">*</span></label>
+                <label for="monto" id="label-monto">Monto <span class="text-danger">*</span></label>
                 <div class="input-group">
                   <div class="input-group-prepend">
                     <span class="input-group-text">$</span>
@@ -211,6 +211,9 @@
                          class="form-control" step="0.01" min="0.01"
                          placeholder="0.00" required>
                 </div>
+                <small id="hint-monto-mes" class="text-muted" style="display:none; font-size:.75rem">
+                  Precio por mensualidad (ajustable por mes abajo)
+                </small>
               </div>
             </div>
 
@@ -263,26 +266,93 @@
             </div>
 
             <div id="grupo-meses-mensualidad" class="mt-3" style="display:none">
+
+              <!-- Selector de año -->
+              <div class="row mb-2">
+                <div class="col-md-2">
+                  <div class="form-group mb-0">
+                    <label for="sel-anio-mensualidad" class="font-weight-bold">
+                      Año <span class="text-danger">*</span>
+                    </label>
+                    <select name="anio_mensualidad" id="sel-anio-mensualidad" class="form-control form-control-sm">
+                      <!-- Poblado por JS -->
+                    </select>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Cabecera de meses -->
               <div class="d-flex justify-content-between align-items-center mb-2">
                 <label class="font-weight-bold mb-0">
-                  Selecciona el Mes a Pagar <span class="text-danger">*</span>
+                  Selecciona el/los Mes(es) a Pagar <span class="text-danger">*</span>
                 </label>
                 <span id="badge-mes-seleccionado" class="badge badge-primary px-2"
                       style="display:none; font-size:.85rem"></span>
               </div>
-              <div id="grid-meses-mensualidad" class="mb-3">
+
+              <!-- Grid de meses (checkboxes estilizados) -->
+              <div id="grid-meses-mensualidad" class="mb-2">
                 <span class="text-muted small">Ingresa el número de control para ver el estado de los meses.</span>
               </div>
+
+              <!-- Leyenda de estados -->
+              <div class="mb-3" style="font-size:.78rem">
+                <span class="badge badge-success mr-2"><i class="fas fa-check mr-1"></i>Pagado</span>
+                <span class="badge badge-danger mr-2">Pendiente</span>
+                <span class="badge badge-warning text-dark mr-2"><i class="fas fa-exclamation-triangle mr-1"></i>Abonos parciales</span>
+                <span class="badge badge-secondary">Futuro</span>
+              </div>
+
+              <!-- Montos individuales por mes (solo en selección múltiple) -->
+              <div id="tabla-montos-meses" class="mb-3" style="display:none">
+                <div class="d-flex align-items-center mb-1">
+                  <span class="small font-weight-bold">Monto por mes:</span>
+                  <span id="total-meses-display" class="ml-auto badge badge-primary" style="font-size:.82rem"></span>
+                </div>
+                <div id="grid-montos-meses"></div>
+              </div>
+
+              <!-- Selector de abono (solo aparece con 1 mes seleccionado) -->
+              <div id="grupo-abono" class="border rounded p-2 mb-3 bg-light" style="display:none">
+                <div id="resumen-abonos-previos" class="mb-2 px-2 py-1 rounded" style="display:none; background:#fff8e1; border-left:3px solid #ffc107;"></div>
+                <div class="form-check mb-1">
+                  <input class="form-check-input" type="checkbox" id="chk-es-abono">
+                  <label class="form-check-label font-weight-bold" for="chk-es-abono">
+                    ¿Es un pago parcial (abono)?
+                  </label>
+                </div>
+                <div id="sel-num-abono-wrapper" class="ml-4" style="display:none">
+                  <label for="sel-num-abono" class="small text-muted mb-1">Número de abono:</label>
+                  <select name="num_abono" id="sel-num-abono" class="form-control form-control-sm" style="width:160px" disabled>
+                    <option value="1">Abono 1</option>
+                    <option value="2">Abono 2</option>
+                    <option value="3">Abono 3</option>
+                    <option value="4">Abono 4</option>
+                  </select>
+                  <div class="form-check mt-2" id="wrap-cierra-mes" style="display:none">
+                    <input class="form-check-input" type="checkbox" id="chk-cierra-mes">
+                    <label class="form-check-label font-weight-bold text-success" for="chk-cierra-mes">
+                      <i class="fas fa-check-circle mr-1"></i>¿Este pago cierra el adeudo del mes?
+                    </label>
+                    <small class="d-block text-muted" style="font-size:.75rem">
+                      El mes quedará marcado en verde (pagado completo).
+                    </small>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Fecha de pago -->
               <div class="row">
                 <div class="col-md-3">
                   <div class="form-group mb-0">
                     <label for="fecha_pago_real">Fecha de Pago <span class="text-danger">*</span></label>
                     <input type="date" name="fecha_pago_real" id="fecha_pago_real"
                            class="form-control form-control-sm">
-                    <small class="text-muted">Para cálculo de recargos</small>
+                    <small class="text-muted">Fecha real de recepción del pago</small>
                   </div>
                 </div>
               </div>
+
             </div>
 
             <div id="grupo-materia-posgrado" style="display:none" class="mt-2">
@@ -636,8 +706,7 @@ $(function () {
       $('#sel-modalidad-prepa').val('');
       $('#btn-periodo-grid').empty();
       $('.btn-tipo-periodo').removeClass('btn-primary active').addClass('btn-outline-primary');
-      $('#grid-meses-mensualidad').html('<span class="text-muted small">Ingresa el número de control para ver el estado de los meses.</span>');
-      $('#badge-mes-seleccionado').hide();
+      resetMesesMensualidad();
       $('#grid-materias-posgrado').html('<span class="text-muted small">Busca al alumno para ver las materias del programa.</span>');
       $('#badge-materia-seleccionada').hide();
     }, 10);
@@ -650,10 +719,20 @@ $(function () {
     const conceptoVal       = $('#concepto').val();
     const nivelVal          = $('#nivel').val();
     const esPosgradoMateria = nivelVal === 'posgrado' && conceptoVal === 'mensualidad';
+    const esMensualidad     = conceptoVal === 'mensualidad' && nivelVal !== 'posgrado';
 
     if (esPosgradoMateria) {
       if (!$('#detalle_tramite_val').val()) {
         Swal.fire({ icon: 'warning', title: 'Falta la materia', text: 'Selecciona la materia a pagar.' });
+        return;
+      }
+    } else if (esMensualidad) {
+      if (getSelectedMonths().length === 0) {
+        Swal.fire({ icon: 'warning', title: 'Falta el mes', text: 'Selecciona al menos un mes a pagar.' });
+        return;
+      }
+      if (!$('#fecha_pago_real').val()) {
+        Swal.fire({ icon: 'warning', title: 'Falta la fecha', text: 'Selecciona la fecha de pago.' });
         return;
       }
     } else if (conceptoVal && conceptoVal !== 'tramite') {
@@ -665,18 +744,22 @@ $(function () {
         Swal.fire({ icon: 'warning', title: 'Falta el tipo de periodo', text: 'Selecciona Normal o Inter.' });
         return;
       }
-      if (conceptoVal === 'mensualidad' && !$('#fecha_pago_real').val()) {
-        Swal.fire({ icon: 'warning', title: 'Falta la fecha', text: 'Selecciona la fecha de pago.' });
-        return;
-      }
     }
 
     const nombre   = $('#nombre_alumno').val().trim();
     const nivel    = $('#nivel option:selected').text().trim();
     const concepto = $('#concepto option:selected').text().trim();
     const tramite  = $('#detalle_tramite option:selected').text().trim();
-    const montoRaw = parseFloat($('#monto').val()) || 0;
-    const monto    = montoRaw.toLocaleString('es-MX', { style: 'currency', currency: 'MXN' });
+
+    let montoRaw;
+    const $inputsMes = $('#grid-montos-meses .monto-mes-input');
+    if (esMensualidad && $inputsMes.length > 0) {
+      montoRaw = 0;
+      $inputsMes.each(function () { montoRaw += parseFloat($(this).val()) || 0; });
+    } else {
+      montoRaw = parseFloat($('#monto').val()) || 0;
+    }
+    const monto = montoRaw.toLocaleString('es-MX', { style: 'currency', currency: 'MXN' });
 
     let conceptoDisplay = concepto;
     if (conceptoVal === 'tramite' && tramite) {
@@ -701,10 +784,16 @@ $(function () {
     const $btn = $(this);
     $btn.prop('disabled', true).html('<i class="fas fa-spinner fa-spin mr-1"></i> Procesando...');
 
+    // Si "cierra el adeudo" está marcado, no enviar num_abono → se guarda como pago completo
+    const cierraMes = $('#chk-cierra-mes').is(':checked');
+    if (cierraMes) $('#sel-num-abono').prop('disabled', true);
+    const formData = $('#form-pago').serialize();
+    if (cierraMes) $('#sel-num-abono').prop('disabled', false);
+
     $.ajax({
       url    : BASE_URL + 'pagos/registrar',
       method : 'POST',
-      data   : $('#form-pago').serialize(),
+      data   : formData,
       headers: { 'X-Requested-With': 'XMLHttpRequest' },
       success: function (res) {
         $('input[name="' + res.csrf_name + '"]').val(res.csrf_hash);
@@ -775,14 +864,208 @@ $(function () {
     $('#mes_inicio_ciclo_val').val($(this).val());
   });
 
+  // ── Helpers de meses ────────────────────────────────────────────
+  function getSelectedMonths() {
+    const result = [];
+    $('input.chk-mes-mensualidad:checked').each(function () {
+      result.push({ mes: parseInt($(this).val()), nombre: $(this).data('nombre') });
+    });
+    return result;
+  }
+
+  function actualizarTablaMontos() {
+    const sel    = getSelectedMonths();
+    const $wrap  = $('#tabla-montos-meses');
+    const $grid  = $('#grid-montos-meses');
+    const anio   = $('#sel-anio-mensualidad').val() || new Date().getFullYear();
+    const precio = parseFloat($('#monto').val()) || 0;
+
+    if (sel.length < 2) {
+      $wrap.hide();
+      $grid.empty();
+      $('#label-monto').html('Monto <span class="text-danger">*</span>');
+      $('#hint-monto-mes').hide();
+      return;
+    }
+
+    $('#label-monto').html('Precio por mensualidad <span class="text-danger">*</span>');
+    $('#hint-monto-mes').show();
+
+    // Preservar valores ingresados manualmente
+    const prevVals = {};
+    $grid.find('.monto-mes-input[data-manual]').each(function () {
+      prevVals[$(this).data('mes')] = $(this).val();
+    });
+
+    $grid.empty();
+    const $tbl = $('<table>').addClass('table table-sm table-bordered mb-1').css('width', 'auto');
+    sel.forEach(function (m) {
+      const val = prevVals[m.mes] !== undefined ? prevVals[m.mes] : (precio > 0 ? precio.toFixed(2) : '');
+      const $input = $('<input type="number">')
+        .addClass('form-control form-control-sm monto-mes-input')
+        .attr({ name: 'montos_pago[]', step: '0.01', min: '0.01', 'data-mes': m.mes })
+        .val(val)
+        .css('width', '110px');
+      if (prevVals[m.mes] !== undefined) $input.attr('data-manual', '1');
+
+      const $ig = $('<div>').addClass('input-group input-group-sm')
+        .append($('<div>').addClass('input-group-prepend').append($('<span>').addClass('input-group-text').text('$')))
+        .append($input);
+
+      $tbl.append(
+        $('<tr>')
+          .append($('<td>').addClass('align-middle py-1 pr-3 small font-weight-bold').css('white-space','nowrap').text(MESES[m.mes - 1] + ' ' + anio))
+          .append($('<td>').addClass('py-1').append($ig))
+      );
+    });
+    $grid.append($tbl);
+    $wrap.show();
+    actualizarTotalMeses();
+  }
+
+  function actualizarTotalMeses() {
+    const $inputs = $('#grid-montos-meses .monto-mes-input');
+    if ($inputs.length === 0) return;
+    let total = 0;
+    $inputs.each(function () { total += parseFloat($(this).val()) || 0; });
+    $('#total-meses-display').text('Total: ' + total.toLocaleString('es-MX', { style: 'currency', currency: 'MXN' }));
+  }
+
+  function actualizarEstadoMeses() {
+    const seleccionados = getSelectedMonths();
+    const count         = seleccionados.length;
+    const anio          = $('#sel-anio-mensualidad').val() || new Date().getFullYear();
+
+    if (count > 0) {
+      const txt = seleccionados.map(function (m) {
+        return MESES[m.mes - 1].substring(0, 3) + ' ' + anio;
+      }).join(', ');
+      $('#badge-mes-seleccionado').text(txt).show();
+    } else {
+      $('#badge-mes-seleccionado').hide();
+    }
+
+    actualizarTablaMontos();
+
+    // Abono: solo disponible con exactamente 1 mes seleccionado
+    $('#grupo-abono').toggle(count === 1);
+    if (count !== 1) {
+      $('#chk-es-abono').prop('checked', false);
+      $('#sel-num-abono').prop('disabled', true);
+      $('#sel-num-abono-wrapper').hide();
+      $('#chk-cierra-mes').prop('checked', false);
+      $('#wrap-cierra-mes').hide();
+      $('#resumen-abonos-previos').hide().empty();
+    } else {
+      // Auto-activar abono si el mes tiene abonos parciales previos
+      const $chkMes = $('input.chk-mes-mensualidad:checked');
+      const status  = $chkMes.data('status');
+      const abonos  = parseInt($chkMes.data('abonos')) || 0;
+      if (status === 'parcial') {
+        if (!$('#chk-es-abono').is(':checked')) {
+          $('#chk-es-abono').prop('checked', true).trigger('change');
+        }
+        // Sugerir el siguiente número de abono
+        const siguiente = Math.min(abonos + 1, 4);
+        $('#sel-num-abono').val(siguiente);
+
+        // Mostrar resumen de abonos previos
+        const detalle = JSON.parse($chkMes.attr('data-detalle') || '[]');
+        if (detalle.length > 0) {
+          let totalPagado = 0;
+          let html = '<p class="mb-1 small font-weight-bold" style="color:#856404"><i class="fas fa-history mr-1"></i>Abonos ya registrados:</p>';
+          detalle.forEach(function (a) {
+            totalPagado += a.monto;
+            const label = a.num_abono !== null ? 'Abono ' + a.num_abono : 'Pago completo';
+            html += '<div class="d-flex justify-content-between small">' +
+              '<span class="text-muted">' + label + ' <small class="text-muted">(' + (a.fecha || '') + ')</small></span>' +
+              '<span class="font-weight-bold">$' + a.monto.toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, ',') + '</span>' +
+              '</div>';
+          });
+          html += '<div class="d-flex justify-content-between small font-weight-bold border-top mt-1 pt-1">' +
+            '<span>Total pagado hasta ahora:</span>' +
+            '<span class="text-success">$' + totalPagado.toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, ',') + '</span>' +
+            '</div>';
+          $('#resumen-abonos-previos').html(html).show();
+        } else {
+          $('#resumen-abonos-previos').hide().empty();
+        }
+      } else {
+        $('#resumen-abonos-previos').hide().empty();
+      }
+    }
+  }
+
+  function resetMesesMensualidad() {
+    $('#grid-meses-mensualidad').html('<span class="text-muted small">Ingresa el número de control para ver el estado de los meses.</span>');
+    $('#badge-mes-seleccionado').hide();
+    $('#grupo-abono').hide();
+    $('#chk-es-abono').prop('checked', false);
+    $('#sel-num-abono').prop('disabled', true);
+    $('#sel-num-abono-wrapper').hide();
+    $('#chk-cierra-mes').prop('checked', false);
+    $('#wrap-cierra-mes').hide();
+    $('#resumen-abonos-previos').hide().empty();
+    $('#tabla-montos-meses').hide();
+    $('#grid-montos-meses').empty();
+    $('#label-monto').html('Monto <span class="text-danger">*</span>');
+    $('#hint-monto-mes').hide();
+    $('#aviso-mensualidad-directa').remove();
+  }
+
+  // Propagar precio global a inputs individuales no editados manualmente
+  $('#monto').on('input', function () {
+    const precio = parseFloat($(this).val()) || 0;
+    $('.monto-mes-input:not([data-manual])').val(precio > 0 ? precio.toFixed(2) : '');
+    actualizarTotalMeses();
+  });
+
+  // Marcar input individual como editado manualmente
+  $(document).on('input', '.monto-mes-input', function () {
+    $(this).attr('data-manual', '1');
+    actualizarTotalMeses();
+  });
+
+  // ── Selector de año ──────────────────────────────────────────────
+  function inicializarAnioMensualidad() {
+    const $sel      = $('#sel-anio-mensualidad');
+    const anioActual = new Date().getFullYear();
+    $sel.empty();
+    for (let y = anioActual; y >= anioActual - 5; y--) {
+      $sel.append($('<option>').val(y).text(y));
+    }
+  }
+
+  // Recargar meses al cambiar año
+  $(document).on('change', '#sel-anio-mensualidad', function () {
+    resetMesesMensualidad();
+    cargarMesesMensualidad();
+  });
+
+  // Toggle abono
+  $(document).on('change', '#chk-es-abono', function () {
+    const checked = $(this).is(':checked');
+    $('#sel-num-abono-wrapper').toggle(checked);
+    $('#sel-num-abono').prop('disabled', !checked);
+    if (!checked) {
+      $('#sel-num-abono').val('1');
+      $('#chk-cierra-mes').prop('checked', false);
+      $('#wrap-cierra-mes').hide();
+    } else {
+      // "Cierra el adeudo" solo aplica cuando el mes ya tiene abonos previos
+      const status = $('input.chk-mes-mensualidad:checked').data('status');
+      if (status === 'parcial') {
+        $('#wrap-cierra-mes').show();
+      }
+    }
+  });
+
   // ── Carga estado de meses para mensualidad ───────────────────────
   function cargarMesesMensualidad() {
     const numControl = $('#num_control').val().trim();
     const nivel      = $('#nivel').val();
+    const anio       = $('#sel-anio-mensualidad').val() || '';
     const $grid      = $('#grid-meses-mensualidad');
-
-    $('#periodo_pago_val').val('');
-    $('#badge-mes-seleccionado').hide();
 
     if (!numControl || !nivel) {
       $grid.html('<span class="text-muted small">Ingresa el número de control para ver el estado de los meses.</span>');
@@ -791,7 +1074,7 @@ $(function () {
 
     $grid.html('<span class="text-muted"><i class="fas fa-spinner fa-spin mr-1"></i> Cargando...</span>');
 
-    $.get(BASE_URL + 'pagos/estado-mensualidades', { num_control: numControl, nivel: nivel })
+    $.get(BASE_URL + 'pagos/estado-mensualidades', { num_control: numControl, nivel: nivel, anio: anio })
       .done(function (res) {
         $('#aviso-mensualidad-directa').remove();
         if (!res.meses || res.meses.length === 0) {
@@ -813,40 +1096,58 @@ $(function () {
     $grid.empty();
 
     meses.forEach(function (m) {
-      let cls, icon, disabled, original;
+      const abrev = m.nombre.substring(0, 3);
 
       if (m.status === 'pagado') {
-        cls      = 'btn btn-success btn-sm mr-1 mb-1';
-        icon     = '<i class="fas fa-check mr-1"></i>';
-        disabled = true;
-        original = null;
-      } else if (m.status === 'na') {
-        cls      = 'btn btn-outline-secondary btn-sm mr-1 mb-1';
-        icon     = '<i class="fas fa-minus mr-1"></i>';
-        disabled = true;
-        original = null;
-      } else if (m.status === 'pendiente') {
-        cls      = 'btn btn-danger btn-sm mr-1 mb-1 btn-mes-mensualidad';
-        icon     = '';
-        disabled = false;
-        original = 'danger';
-      } else {
-        cls      = 'btn btn-secondary btn-sm mr-1 mb-1 btn-mes-mensualidad';
-        icon     = '';
-        disabled = false;
-        original = 'secondary';
+        // Deshabilitado: pago completo
+        $grid.append(
+          $('<span>').addClass('btn btn-success btn-sm mr-1 mb-1')
+            .css({'min-width':'68px', 'cursor':'not-allowed', 'opacity':'.85'})
+            .html('<i class="fas fa-check mr-1"></i>' + abrev)
+        );
+        return;
       }
 
-      const $btn = $('<button type="button">')
-        .addClass(cls)
-        .css('min-width', '68px')
-        .html(icon + m.nombre.substring(0, 3))
-        .attr('data-mes', m.mes)
-        .attr('data-nombre', m.nombre)
-        .attr('data-original', original)
-        .prop('disabled', disabled);
+      if (m.status === 'na') {
+        $grid.append(
+          $('<span>').addClass('btn btn-outline-secondary btn-sm mr-1 mb-1')
+            .css({'min-width':'68px', 'cursor':'not-allowed', 'opacity':'.5'})
+            .html('<i class="fas fa-minus mr-1"></i>' + abrev)
+        );
+        return;
+      }
 
-      $grid.append($btn);
+      // Seleccionable: pendiente | parcial | futuro
+      let btnCls, icon;
+      if (m.status === 'pendiente') {
+        btnCls = 'btn-danger';
+        icon   = '';
+      } else if (m.status === 'parcial') {
+        btnCls = 'btn-warning';
+        icon   = '<i class="fas fa-exclamation-triangle mr-1" style="font-size:.75em"></i>';
+      } else {
+        btnCls = 'btn-secondary';
+        icon   = '';
+      }
+
+      const $label = $('<label>')
+        .addClass('btn ' + btnCls + ' btn-sm mr-1 mb-1')
+        .css({'min-width':'68px', 'cursor':'pointer', 'user-select':'none', 'margin-bottom':'4px'})
+        .attr('title', m.nombre + (m.status === 'parcial' ? ' — tiene abonos parciales' : ''));
+
+      const $chk = $('<input type="checkbox">')
+        .addClass('chk-mes-mensualidad')
+        .attr('name', 'meses_pago[]')
+        .val(m.mes)
+        .attr('data-nombre', m.nombre)
+        .attr('data-original', btnCls)
+        .attr('data-status', m.status)
+        .attr('data-abonos', m.abonos || 0)
+        .attr('data-detalle', JSON.stringify(m.abonos_detalle || []))
+        .css({'position':'absolute','opacity':'0','width':'0','height':'0'});
+
+      $label.append($chk).append(icon + abrev);
+      $grid.append($label);
     });
   }
 
@@ -950,6 +1251,8 @@ $(function () {
       }
       const hoy = new Date().toISOString().split('T')[0];
       $('#fecha_pago_real').val(hoy);
+      inicializarAnioMensualidad();
+      resetMesesMensualidad();
       $('#grupo-meses-mensualidad').show();
       cargarMesesMensualidad();
 
@@ -1025,15 +1328,25 @@ $(function () {
   }
 
   function construirPeriodoDisplay() {
-    const concepto   = $('#concepto').val();
-    const nivelVal   = $('#nivel').val();
+    const concepto = $('#concepto').val();
+    const nivelVal = $('#nivel').val();
+
+    if (nivelVal === 'posgrado' && concepto === 'mensualidad') return '';
+
+    if (concepto === 'mensualidad') {
+      const anio  = $('#sel-anio-mensualidad').val() || new Date().getFullYear();
+      const meses = getSelectedMonths();
+      if (meses.length === 0) return '';
+      let txt = meses.map(function (m) { return MESES[m.mes - 1]; }).join(', ') + ' ' + anio;
+      if ($('#chk-es-abono').is(':checked') && !$('#chk-cierra-mes').is(':checked') && $('#sel-num-abono').val()) {
+        txt += ' — Abono ' + $('#sel-num-abono').val();
+      }
+      return txt;
+    }
+
     const periodoNum = $('#periodo_pago_val').val();
     const tipo       = $('#tipo_periodo_val').val();
-    if (nivelVal === 'posgrado' && concepto === 'mensualidad') return '';
     if (!periodoNum) return '';
-    if (concepto === 'mensualidad') {
-      return MESES[parseInt(periodoNum) - 1] + ' ' + new Date().getFullYear();
-    }
     let txt = 'Periodo ' + periodoNum;
     if (tipo) txt += ' — ' + tipo;
     return txt;
@@ -1098,26 +1411,16 @@ $(function () {
     $('#tipo_periodo_val').val($(this).data('val'));
   });
 
-  $(document).on('click', '.btn-mes-mensualidad:not(:disabled)', function () {
-    const mesNum    = $(this).data('mes');
-    const mesNombre = $(this).data('nombre');
-    const original  = $(this).data('original');
-
-    if ($(this).hasClass('btn-primary')) {
-      $(this).removeClass('btn-primary').addClass('btn-' + original);
-      $('#periodo_pago_val').val('');
-      $('#badge-mes-seleccionado').hide();
-      return;
+  // ── Checkboxes de meses ─────────────────────────────────────────
+  $(document).on('change', '.chk-mes-mensualidad', function () {
+    const $label   = $(this).parent();
+    const original = $(this).data('original');
+    if ($(this).is(':checked')) {
+      $label.removeClass(original).addClass('btn-primary active');
+    } else {
+      $label.removeClass('btn-primary active').addClass(original);
     }
-
-    $('.btn-mes-mensualidad.btn-primary').each(function () {
-      const orig = $(this).data('original');
-      $(this).removeClass('btn-primary').addClass('btn-' + orig);
-    });
-
-    $(this).removeClass('btn-danger btn-secondary').addClass('btn-primary');
-    $('#periodo_pago_val').val(mesNum);
-    $('#badge-mes-seleccionado').text('Mensualidad de ' + mesNombre + ' ' + new Date().getFullYear()).show();
+    actualizarEstadoMeses();
   });
 
   $(document).on('click', '.btn-bach-tipo', function () {

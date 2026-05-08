@@ -84,9 +84,11 @@
         $conceptoLabels = ['inscripcion' => 'Inscripción', 'reinscripcion' => 'Reinscripción', 'tramite' => 'Trámite'];
         if ($es_posgrado) {
             $pagados    = count(array_filter($materias_estado, fn($m) => $m['pagada']));
+            $parciales  = 0;
             $pendientes = count(array_filter($materias_estado, fn($m) => ! $m['pagada']));
         } else {
             $pagados    = count(array_filter($estado, fn($e) => $e['status'] === 'pagado'));
+            $parciales  = count(array_filter($estado, fn($e) => $e['status'] === 'parcial'));
             $pendientes = count(array_filter($estado, fn($e) => $e['status'] === 'pendiente'));
         }
       ?>
@@ -268,6 +270,11 @@
             <span class="badge badge-success p-2 mr-1">
               <i class="fas fa-check mr-1"></i><?= $pagados ?> pagado(s)
             </span>
+            <?php if ($parciales > 0): ?>
+            <span class="badge badge-warning p-2 mr-1 text-dark">
+              <i class="fas fa-adjust mr-1"></i><?= $parciales ?> con abono(s)
+            </span>
+            <?php endif; ?>
             <?php if ($pendientes > 0): ?>
             <span class="badge badge-danger p-2 mr-1">
               <i class="fas fa-times mr-1"></i><?= $pendientes ?> pendiente(s)
@@ -386,6 +393,10 @@
                           $cardClass = 'bg-success text-white';
                           $icon      = '<i class="fas fa-check-circle fa-2x"></i>';
                           break;
+                      case 'parcial':
+                          $cardClass = 'bg-warning text-dark';
+                          $icon      = '<i class="fas fa-adjust fa-2x text-dark" style="opacity:.85"></i>';
+                          break;
                       case 'pendiente':
                           $cardClass = 'bg-danger text-white';
                           $icon      = '<i class="fas fa-times-circle fa-2x"></i>';
@@ -406,14 +417,26 @@
                         <?= $e['nombre'] ?>
                       </p>
                       <?= $icon ?>
-                      <?php if ($e['status'] === 'pagado' && ! empty($e['folio_digital'])): ?>
+                      <?php if ($e['status'] === 'parcial'): ?>
+                      <div class="mt-1">
+                        <span class="badge badge-dark" style="font-size:.65rem">
+                          <?= $e['abonos'] ?> abono<?= $e['abonos'] !== 1 ? 's' : '' ?>
+                        </span>
+                      </div>
+                      <?php endif; ?>
+                      <?php
+                        $mesKey = $anio . '-' . str_pad($e['mes'], 2, '0', STR_PAD_LEFT);
+                        $tienePagos = ! empty($pagos_detalle_meses[$mesKey]);
+                      ?>
+                      <?php if (in_array($e['status'], ['pagado', 'parcial']) && $tienePagos): ?>
                       <div class="mt-2">
-                        <a href="<?= base_url('pagos/comprobante/' . urlencode($e['folio_digital'])) ?>"
-                           target="_blank"
-                           class="btn btn-xs btn-light text-dark"
-                           title="Reimprimir comprobante">
+                        <button type="button"
+                                class="btn btn-xs <?= $e['status'] === 'parcial' ? 'btn-dark' : 'btn-light text-dark' ?> btn-ver-pagos-mes"
+                                data-mes-key="<?= $mesKey ?>"
+                                data-mes-nombre="<?= esc($e['nombre']) ?> <?= $anio ?>"
+                                title="Ver pagos del mes">
                           <i class="fas fa-print"></i>
-                        </a>
+                        </button>
                       </div>
                       <?php endif; ?>
                     </div>
@@ -426,6 +449,9 @@
               <span class="badge badge-success p-2">
                 <i class="fas fa-check-circle mr-1"></i>Pagado
               </span>
+              <span class="badge badge-warning p-2 text-dark">
+                <i class="fas fa-adjust mr-1"></i>Con abono(s) — pago parcial pendiente
+              </span>
               <span class="badge badge-danger p-2">
                 <i class="fas fa-times-circle mr-1"></i>Pendiente
               </span>
@@ -436,8 +462,6 @@
                     title="Meses anteriores al inicio del ciclo o al primer pago registrado. No se consideran adeudos.">
                 <i class="fas fa-minus mr-1"></i>Sin registro / No aplica
               </span>
-              <small class="text-muted ml-1">
-              </small>
             </div>
 
           <?php endif; ?>
@@ -582,4 +606,100 @@
   </div>
 </section>
 
+<!-- ── Modal: detalle de pagos del mes ──────────────────────────────────── -->
+<div class="modal fade" id="modal-pagos-mes" tabindex="-1" role="dialog" aria-labelledby="modal-pagos-mes-titulo">
+  <div class="modal-dialog modal-lg" role="document">
+    <div class="modal-content">
+      <div class="modal-header bg-primary">
+        <h5 class="modal-title text-white" id="modal-pagos-mes-titulo">
+          <i class="fas fa-list-ul mr-2"></i>
+          Pagos — <span id="modal-mes-nombre"></span>
+        </h5>
+        <button type="button" class="close text-white" data-dismiss="modal">
+          <span>&times;</span>
+        </button>
+      </div>
+      <div class="modal-body p-0">
+        <table class="table table-sm table-striped mb-0">
+          <thead class="thead-light">
+            <tr>
+              <th style="width:130px">Tipo</th>
+              <th style="width:100px">Fecha</th>
+              <th style="width:120px">Método</th>
+              <th class="text-right" style="width:110px">Monto</th>
+              <th>Folio</th>
+              <th style="width:50px"></th>
+            </tr>
+          </thead>
+          <tbody id="modal-pagos-body"></tbody>
+          <tfoot id="modal-pagos-foot"></tfoot>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+
+<?= $this->endSection() ?>
+
+<?= $this->section('scripts') ?>
+<script>
+(function () {
+  const pagosPorMes = <?= json_encode($pagos_detalle_meses) ?>;
+  const baseUrl     = '<?= base_url() ?>';
+
+  function fmtMonto(n) {
+    return '$' + parseFloat(n).toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+  }
+
+  $(document).on('click', '.btn-ver-pagos-mes', function () {
+    const key    = $(this).data('mes-key');
+    const nombre = $(this).data('mes-nombre');
+    const rows   = pagosPorMes[key] || [];
+
+    $('#modal-mes-nombre').text(nombre);
+
+    let html  = '';
+    let total = 0;
+
+    rows.forEach(function (p) {
+      total += p.monto;
+
+      const tipoBadge = p.num_abono === null
+        ? '<span class="badge badge-success px-2 py-1"><i class="fas fa-check-circle mr-1"></i>Pago completo</span>'
+        : '<span class="badge badge-warning text-dark px-2 py-1"><i class="fas fa-adjust mr-1"></i>Abono ' + p.num_abono + '</span>';
+
+      const folioCorto = p.folio
+        ? '<code class="text-muted" style="font-size:.7rem">' + p.folio.substring(0, 18) + '&hellip;</code>'
+        : '<span class="text-muted">—</span>';
+
+      const btnPrint = p.folio
+        ? '<a href="' + baseUrl + 'pagos/comprobante/' + encodeURIComponent(p.folio) + '" target="_blank" class="btn btn-xs btn-outline-primary" title="Reimprimir"><i class="fas fa-print"></i></a>'
+        : '';
+
+      html += '<tr>' +
+        '<td>' + tipoBadge + '</td>' +
+        '<td>' + (p.fecha || '—') + '</td>' +
+        '<td>' + (p.metodo_pago || 'Efectivo') + '</td>' +
+        '<td class="text-right font-weight-bold">' + fmtMonto(p.monto) + '</td>' +
+        '<td>' + folioCorto + '</td>' +
+        '<td class="text-center">' + btnPrint + '</td>' +
+        '</tr>';
+    });
+
+    if (!html) {
+      html = '<tr><td colspan="6" class="text-center text-muted py-3">Sin registros</td></tr>';
+    }
+
+    const footHtml = '<tr class="font-weight-bold bg-light">' +
+      '<td colspan="3" class="text-right">Total pagado:</td>' +
+      '<td class="text-right text-primary">' + fmtMonto(total) + '</td>' +
+      '<td colspan="2"></td>' +
+      '</tr>';
+
+    $('#modal-pagos-body').html(html);
+    $('#modal-pagos-foot').html(footHtml);
+    $('#modal-pagos-mes').modal('show');
+  });
+})();
+</script>
 <?= $this->endSection() ?>

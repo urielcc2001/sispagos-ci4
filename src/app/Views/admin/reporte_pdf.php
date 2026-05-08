@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <style>
 @page {
-    size: letter portrait;
+    size: letter landscape;
     margin: 0;
 }
 * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -98,6 +98,11 @@ td.hora {
     font-size: 6pt;
     color: #aaa;
 }
+td.obs {
+    font-size: 6.5pt;
+    color: #555;
+    font-style: italic;
+}
 
 .subtotal-row td {
     background: #d6e4f7;
@@ -177,21 +182,22 @@ $hayAmbosMetodos       = $totalEfectivoPdf > 0 && $totalTransferenciaPdf > 0;
 <table>
   <thead>
     <tr>
-      <th style="width:15%">Folio</th>
-      <th style="width:7%">Tipo</th>
-      <th style="width:9%">Fecha</th>
-      <th style="width:17%">Nombre</th>
-      <th style="width:14%">Concepto</th>
-      <th style="width:8%">Nivel</th>
-      <th style="width:11%">Cajero</th>
-      <th class="r" style="width:10%">Efectivo</th>
-      <th class="r" style="width:9%">Transferencia</th>
+      <th style="width:12%">Folio</th>
+      <th style="width:5%">Tipo</th>
+      <th style="width:7%">Fecha</th>
+      <th style="width:14%">Nombre</th>
+      <th style="width:12%">Concepto</th>
+      <th style="width:6%">Nivel</th>
+      <th style="width:9%">Cajero</th>
+      <th class="r" style="width:8%">Efectivo</th>
+      <th class="r" style="width:8%">Transferencia</th>
+      <th style="width:19%">Observaciones</th>
     </tr>
   </thead>
   <tbody>
     <?php if (empty($pagos)): ?>
     <tr>
-      <td colspan="9" style="text-align:center; padding:14pt; color:#aaa;">
+      <td colspan="10" style="text-align:center; padding:14pt; color:#aaa;">
         No se encontraron registros con los filtros aplicados.
       </td>
     </tr>
@@ -225,17 +231,18 @@ $hayAmbosMetodos       = $totalEfectivoPdf > 0 && $totalTransferenciaPdf > 0;
       <td><?= esc($p['nombre_cajero'] ?? 'N/D') ?></td>
       <td class="monto"><?= ($p['metodo_pago'] ?? '') !== 'Transferencia' ? '$' . number_format((float) $p['monto'], 2) : '—' ?></td>
       <td class="monto"><?= ($p['metodo_pago'] ?? '') === 'Transferencia' ? '$' . number_format((float) $p['monto'], 2) : '—' ?></td>
+      <td class="obs"><?= ! empty($p['observaciones']) ? esc($p['observaciones']) : '—' ?></td>
     </tr>
     <?php endforeach; ?>
 
     <?php if ($hayAmbosMetodos): ?>
     <tr class="subtotal-row">
-      <td colspan="7" class="r" style="padding-right:8pt;">Total Efectivo</td>
+      <td colspan="8" class="r" style="padding-right:8pt;">Total Efectivo</td>
       <td class="r">$<?= number_format($totalEfectivoPdf, 2) ?></td>
       <td class="r">—</td>
     </tr>
     <tr class="subtotal-row">
-      <td colspan="7" class="r" style="padding-right:8pt;">Total Transferencia</td>
+      <td colspan="8" class="r" style="padding-right:8pt;">Total Transferencia</td>
       <td class="r">—</td>
       <td class="r">$<?= number_format($totalTransferenciaPdf, 2) ?></td>
     </tr>
@@ -245,7 +252,7 @@ $hayAmbosMetodos       = $totalEfectivoPdf > 0 && $totalTransferenciaPdf > 0;
   </tbody>
   <tfoot>
     <tr>
-      <td colspan="7" class="r" style="padding-right:8pt; letter-spacing:0.3pt;">TOTAL</td>
+      <td colspan="8" class="r" style="padding-right:8pt; letter-spacing:0.3pt;">TOTAL</td>
       <td colspan="2" class="r" style="font-size:9pt;">$<?= number_format((float) $totalGeneral, 2) ?></td>
     </tr>
   </tfoot>

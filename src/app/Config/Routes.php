@@ -15,6 +15,7 @@ $routes->get('pagos/ultimo-pago', 'PagosController::ultimoPago');
 $routes->get('pagos/tramites-disponibles', 'PagosController::tramitesDisponibles');
 $routes->post('pagos/registrar', 'PagosController::registrar');
 $routes->get('pagos/comprobante/(:segment)', 'PagosController::comprobante/$1');
+$routes->get('pagos/comprobante-lote/(:segment)', 'PagosController::comprobanteLote/$1');
 
 $routes->get('dashboard', 'AdminController::dashboard');
 $routes->get('admin/reportes', 'AdminController::reportes');
