@@ -137,6 +137,25 @@
                     </div>
                   </div>
                 </div>
+                <div class="col-md-4">
+                  <div class="form-group">
+                    <label for="metodo_pago">Método de Pago</label>
+                    <select name="metodo_pago" id="metodo_pago" class="form-control">
+                      <option value="Efectivo"           <?= ($pago['metodo_pago'] ?? '') === 'Efectivo'           ? 'selected' : '' ?>>Efectivo</option>
+                      <option value="Transferencia"      <?= ($pago['metodo_pago'] ?? '') === 'Transferencia'      ? 'selected' : '' ?>>Transferencia</option>
+                      <option value="Depósito bancario"  <?= ($pago['metodo_pago'] ?? '') === 'Depósito bancario'  ? 'selected' : '' ?>>Depósito bancario</option>
+                      <option value="Tarjeta de débito"  <?= ($pago['metodo_pago'] ?? '') === 'Tarjeta de débito'  ? 'selected' : '' ?>>Tarjeta de débito</option>
+                      <option value="Tarjeta de crédito" <?= ($pago['metodo_pago'] ?? '') === 'Tarjeta de crédito' ? 'selected' : '' ?>>Tarjeta de crédito</option>
+                    </select>
+                  </div>
+                </div>
+              </div>
+
+              <div class="form-group">
+                <label for="observaciones">Observaciones</label>
+                <textarea name="observaciones" id="observaciones"
+                          class="form-control" rows="3"
+                          placeholder="Notas adicionales sobre este pago (opcional)"><?= esc($pago['observaciones'] ?? '') ?></textarea>
               </div>
 
               <div class="callout callout-warning mt-2 mb-0">

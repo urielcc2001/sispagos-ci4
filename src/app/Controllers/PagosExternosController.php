@@ -178,6 +178,7 @@ class PagosExternosController extends BaseController
             'concepto'       => trim($this->request->getPost('concepto') ?? ''),
             'monto'          => (float) $this->request->getPost('monto'),
             'metodo_pago'    => $this->request->getPost('metodo_pago') ?: 'Efectivo',
+            'observaciones'  => trim($this->request->getPost('observaciones') ?? '') ?: null,
         ]);
 
         return redirect()->to(base_url('dashboard'))

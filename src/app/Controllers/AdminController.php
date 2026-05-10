@@ -410,6 +410,8 @@ class AdminController extends BaseController
             'detalle_tramite' => $request->getPost('detalle_tramite') ?: null,
             'periodo_pago'    => $request->getPost('periodo_pago') ?: null,
             'monto'           => $request->getPost('monto'),
+            'metodo_pago'     => $request->getPost('metodo_pago') ?: 'Efectivo',
+            'observaciones'   => trim($request->getPost('observaciones') ?? '') ?: null,
         ];
 
         $db->table('pagos')->where('id', $id)->update($cambios);
