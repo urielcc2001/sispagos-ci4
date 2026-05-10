@@ -95,23 +95,23 @@ class AdminController extends BaseController
 
         usort($pagos, fn($a, $b) => strcmp($b['created_at'], $a['created_at']));
 
-        $totalEfectivo      = array_sum(array_column(
-            array_filter($pagos, fn($p) => ($p['metodo_pago'] ?? 'Efectivo') !== 'Transferencia'),
-            'monto'
-        ));
-        $totalTransferencia = array_sum(array_column(
-            array_filter($pagos, fn($p) => ($p['metodo_pago'] ?? '') === 'Transferencia'),
-            'monto'
-        ));
+        $totalEfectivo       = array_sum(array_column(array_filter($pagos, fn($p) => in_array($p['metodo_pago'] ?? 'Efectivo', ['Efectivo', ''])), 'monto'));
+        $totalTransferencia  = array_sum(array_column(array_filter($pagos, fn($p) => ($p['metodo_pago'] ?? '') === 'Transferencia'), 'monto'));
+        $totalDeposito       = array_sum(array_column(array_filter($pagos, fn($p) => ($p['metodo_pago'] ?? '') === 'Depósito bancario'), 'monto'));
+        $totalTarjetaDebito  = array_sum(array_column(array_filter($pagos, fn($p) => ($p['metodo_pago'] ?? '') === 'Tarjeta de débito'), 'monto'));
+        $totalTarjetaCredito = array_sum(array_column(array_filter($pagos, fn($p) => ($p['metodo_pago'] ?? '') === 'Tarjeta de crédito'), 'monto'));
 
         return [
-            'pagos'              => $pagos,
-            'totalGeneral'       => array_sum(array_column($pagos, 'monto')),
-            'totalEfectivo'      => $totalEfectivo,
-            'totalTransferencia' => $totalTransferencia,
-            'filtros'            => compact('fechaInicio', 'fechaFin', 'periodo', 'idCajero', 'nivel', 'origen', 'metodoPago'),
-            'rol'                => $rol,
-            'idSesion'           => $idSesion,
+            'pagos'               => $pagos,
+            'totalGeneral'        => array_sum(array_column($pagos, 'monto')),
+            'totalEfectivo'       => $totalEfectivo,
+            'totalTransferencia'  => $totalTransferencia,
+            'totalDeposito'       => $totalDeposito,
+            'totalTarjetaDebito'  => $totalTarjetaDebito,
+            'totalTarjetaCredito' => $totalTarjetaCredito,
+            'filtros'             => compact('fechaInicio', 'fechaFin', 'periodo', 'idCajero', 'nivel', 'origen', 'metodoPago'),
+            'rol'                 => $rol,
+            'idSesion'            => $idSesion,
         ];
     }
 
@@ -134,7 +134,7 @@ class AdminController extends BaseController
             return $guard;
         }
 
-        ['pagos' => $pagos, 'totalGeneral' => $total, 'totalEfectivo' => $totalEfectivo, 'totalTransferencia' => $totalTransferencia] = $this->filtrarPagos();
+        ['pagos' => $pagos, 'totalGeneral' => $total, 'totalEfectivo' => $totalEfectivo, 'totalTransferencia' => $totalTransferencia, 'totalDeposito' => $totalDeposito, 'totalTarjetaDebito' => $totalTarjetaDebito, 'totalTarjetaCredito' => $totalTarjetaCredito] = $this->filtrarPagos();
 
         $conceptoLabels = [
             'inscripcion'   => 'Inscripción',
@@ -147,7 +147,7 @@ class AdminController extends BaseController
         $esc = fn(string $v): string => '"' . str_replace('"', '""', $v) . '"';
 
         $lines   = [];
-        $lines[] = implode(',', array_map($esc, ['Folio', 'Tipo', 'Fecha', 'Nombre', 'Concepto', 'Nivel', 'Cajero', 'Efectivo', 'Transferencia']));
+        $lines[] = implode(',', array_map($esc, ['Folio', 'Tipo', 'Fecha', 'Nombre', 'Concepto', 'Nivel', 'Cajero', 'Efectivo', 'Transferencia', 'Depósito bancario', 'Tarjeta de débito', 'Tarjeta de crédito']));
 
         foreach ($pagos as $p) {
             $tipoLabel = $p['tipo_pago'] === 'externo' ? 'Externo/Aspirante' : 'Alumno';
@@ -165,7 +165,7 @@ class AdminController extends BaseController
 
             $nivelLabel = ! empty($p['nivel']) ? ($nivelLabels[$p['nivel']] ?? $p['nivel']) : '—';
 
-            $esTransf = ($p['metodo_pago'] ?? '') === 'Transferencia';
+            $metodo = $p['metodo_pago'] ?? 'Efectivo';
             $lines[] = implode(',', array_map($esc, [
                 $p['folio_digital'] ?? '',
                 $tipoLabel,
@@ -174,14 +174,20 @@ class AdminController extends BaseController
                 $concepto,
                 $nivelLabel,
                 $p['nombre_cajero'] ?? 'N/D',
-                $esTransf ? '' : number_format((float) $p['monto'], 2, '.', ''),
-                $esTransf ? number_format((float) $p['monto'], 2, '.', '') : '',
+                in_array($metodo, ['Efectivo', ''])     ? number_format((float) $p['monto'], 2, '.', '') : '',
+                $metodo === 'Transferencia'              ? number_format((float) $p['monto'], 2, '.', '') : '',
+                $metodo === 'Depósito bancario'          ? number_format((float) $p['monto'], 2, '.', '') : '',
+                $metodo === 'Tarjeta de débito'          ? number_format((float) $p['monto'], 2, '.', '') : '',
+                $metodo === 'Tarjeta de crédito'         ? number_format((float) $p['monto'], 2, '.', '') : '',
             ]));
         }
 
-        $lines[] = implode(',', array_map($esc, ['', '', '', '', '', '', 'Total Efectivo',         number_format((float) $totalEfectivo,      2, '.', ''), '']));
-        $lines[] = implode(',', array_map($esc, ['', '', '', '', '', '', 'Total Transferencia',    '', number_format((float) $totalTransferencia, 2, '.', '')]));
-        $lines[] = implode(',', array_map($esc, ['', '', '', '', '', '', 'TOTAL',                  number_format((float) $total,               2, '.', ''), '']));
+        $lines[] = implode(',', array_map($esc, ['', '', '', '', '', '', 'Total Efectivo',          number_format((float) $totalEfectivo,      2, '.', ''), '', '', '', '']));
+        $lines[] = implode(',', array_map($esc, ['', '', '', '', '', '', 'Total Transferencia',    '', number_format((float) $totalTransferencia, 2, '.', ''), '', '', '']));
+        $lines[] = implode(',', array_map($esc, ['', '', '', '', '', '', 'Total Depósito bancario','', '', number_format((float) $totalDeposito,       2, '.', ''), '', '']));
+        $lines[] = implode(',', array_map($esc, ['', '', '', '', '', '', 'Total T. de débito',     '', '', '', number_format((float) $totalTarjetaDebito,  2, '.', ''), '']));
+        $lines[] = implode(',', array_map($esc, ['', '', '', '', '', '', 'Total T. de crédito',    '', '', '', '', number_format((float) $totalTarjetaCredito, 2, '.', '')]));
+        $lines[] = implode(',', array_map($esc, ['', '', '', '', '', '', 'TOTAL',                  number_format((float) $total,               2, '.', ''), '', '', '', '']));
 
         $csv      = "\xEF\xBB\xBF" . implode("\r\n", $lines);
         $filename = 'reporte-pagos-' . date('Ymd-His') . '.csv';

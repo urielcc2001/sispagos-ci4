@@ -62,6 +62,70 @@ class PagosController extends BaseController
         ]);
     }
 
+    public function estadoPeriodos()
+    {
+        if (! service('session')->get('logged_in')) {
+            return $this->response->setStatusCode(401)->setJSON([]);
+        }
+
+        $numControl = trim($this->request->getGet('num_control') ?? '');
+        $nivel      = $this->request->getGet('nivel') ?? '';
+        $concepto   = $this->request->getGet('concepto') ?? '';
+
+        if (! $numControl || ! $nivel || ! in_array($concepto, ['inscripcion', 'reinscripcion'])) {
+            return $this->response->setJSON(['status_map' => [], 'detalle_map' => []]);
+        }
+
+        $db = \Config\Database::connect();
+
+        $rows = $db->table('pagos')
+            ->select('periodo_pago,
+                      MAX(num_abono IS NULL)       AS tiene_completo,
+                      SUM(num_abono IS NOT NULL)   AS num_abonos,
+                      MAX(folio_digital)            AS folio_digital')
+            ->where('num_control', $numControl)
+            ->where('nivel', $nivel)
+            ->where('concepto', $concepto)
+            ->where('periodo_pago IS NOT NULL', null, false)
+            ->groupBy('periodo_pago')
+            ->get()->getResultArray();
+
+        $detalleRows = $db->table('pagos')
+            ->select('periodo_pago, folio_digital, monto, num_abono, created_at, metodo_pago')
+            ->where('num_control', $numControl)
+            ->where('nivel', $nivel)
+            ->where('concepto', $concepto)
+            ->where('periodo_pago IS NOT NULL', null, false)
+            ->orderBy('periodo_pago', 'ASC')
+            ->orderBy('num_abono',    'ASC')
+            ->get()->getResultArray();
+
+        $detalleMap = [];
+        foreach ($detalleRows as $d) {
+            $detalleMap[(int) $d['periodo_pago']][] = [
+                'folio'      => $d['folio_digital'],
+                'monto'      => (float) $d['monto'],
+                'num_abono'  => $d['num_abono'] !== null ? (int) $d['num_abono'] : null,
+                'fecha'      => substr($d['created_at'], 0, 10),
+                'metodo_pago'=> $d['metodo_pago'] ?? 'Efectivo',
+            ];
+        }
+
+        $statusMap = [];
+        foreach ($rows as $r) {
+            $statusMap[(int) $r['periodo_pago']] = [
+                'tiene_completo' => (bool)(int) $r['tiene_completo'],
+                'num_abonos'     => (int) $r['num_abonos'],
+                'folio'          => $r['folio_digital'],
+            ];
+        }
+
+        return $this->response->setJSON([
+            'status_map'  => $statusMap,
+            'detalle_map' => $detalleMap,
+        ]);
+    }
+
     public function tramitesDisponibles()
     {
         if (! service('session')->get('logged_in')) {
@@ -362,6 +426,8 @@ class PagosController extends BaseController
             return view('pagos/registro', ['error' => $errorValidacion]);
         }
 
+        $numAbono = $this->request->getPost('num_abono') ? (int) $this->request->getPost('num_abono') : null;
+
         $data = [
             'num_control'      => $this->request->getPost('num_control'),
             'nivel'            => $this->request->getPost('nivel'),
@@ -374,6 +440,7 @@ class PagosController extends BaseController
             'tipo_periodo'     => $tipoPeriodo,
             'fecha_pago_real'  => $fechaPagoReal,
             'monto'            => $this->request->getPost('monto'),
+            'num_abono'        => $numAbono,
             'id_cajero'        => service('session')->get('id_usuario'),
             'metodo_pago'      => $this->request->getPost('metodo_pago') ?: 'Efectivo',
             'observaciones'    => $this->request->getPost('observaciones') ?: null,
@@ -594,18 +661,22 @@ class PagosController extends BaseController
                     $periodoDisplay .= ' — Abono ' . $pago['num_abono'];
                 }
             } elseif ($plan === 'Semestral') {
-                $rango          = ($num % 2 !== 0) ? 'Agosto - Diciembre' : 'Febrero - Julio';
-                $periodoDisplay = 'Semestre ' . $num . ' (' . $rango . ')';
+                $periodoDisplay = 'Semestre ' . $num;
+                if (! empty($pago['num_abono'])) {
+                    $periodoDisplay .= ' — Abono ' . $pago['num_abono'];
+                }
             } elseif ($pago['nivel'] === 'uni' || $plan === 'Cuatrimestral') {
-                $mod            = $num % 3;
-                if ($mod === 1)     $rango = 'Enero - Abril';
-                elseif ($mod === 2) $rango = 'Mayo - Agosto';
-                else                $rango = 'Septiembre - Diciembre';
-                $periodoDisplay = 'Cuatrimestre ' . $num . ' (' . $rango . ')';
+                $periodoDisplay = 'Cuatrimestre ' . $num;
+                if (! empty($pago['num_abono'])) {
+                    $periodoDisplay .= ' — Abono ' . $pago['num_abono'];
+                }
             } else {
                 $periodoDisplay = 'Periodo ' . $num;
                 if (! empty($pago['tipo_periodo'])) {
                     $periodoDisplay .= ' — ' . $pago['tipo_periodo'];
+                }
+                if (! empty($pago['num_abono'])) {
+                    $periodoDisplay .= ' — Abono ' . $pago['num_abono'];
                 }
             }
         }
@@ -748,13 +819,17 @@ class PagosController extends BaseController
                    'Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
 
         if ($concepto === 'inscripcion') {
-            $existe = $db->table('pagos')
-                ->where('num_control', $numControl)
-                ->where('nivel', $nivel)
-                ->where('concepto', 'inscripcion')
-                ->countAllResults();
-            if ($existe > 0) {
-                return 'El alumno ya tiene una inscripción registrada para este nivel.';
+            $numAbono = $this->request->getPost('num_abono');
+            if (! $numAbono) {
+                $existe = $db->table('pagos')
+                    ->where('num_control', $numControl)
+                    ->where('nivel', $nivel)
+                    ->where('concepto', 'inscripcion')
+                    ->where('num_abono IS NULL', null, false)
+                    ->countAllResults();
+                if ($existe > 0) {
+                    return 'El alumno ya tiene una inscripción completa registrada para este nivel.';
+                }
             }
         }
 
@@ -793,27 +868,6 @@ class PagosController extends BaseController
                 return null;
             }
 
-            if ($fechaPagoReal) {
-                $mesReal  = (int) date('n', strtotime($pagoInicial['created_at']));
-                $anioRef  = (int) date('Y', strtotime($pagoInicial['created_at']));
-                $mesAncla = ! empty($pagoInicial['mes_inicio_ciclo'])
-                            ? (int) $pagoInicial['mes_inicio_ciclo']
-                            : $mesReal;
-                if ($mesAncla > $mesReal) {
-                    $anioRef--;
-                }
-
-                $mesMens  = (int) date('n', strtotime($fechaPagoReal));
-                $anioMens = (int) date('Y', strtotime($fechaPagoReal));
-
-                $tsAncla = mktime(0, 0, 0, $mesAncla, 1, $anioRef);
-                $tsMens  = mktime(0, 0, 0, $mesMens,  1, $anioMens);
-
-                if ($tsMens < $tsAncla) {
-                    return 'No se puede registrar una mensualidad anterior al inicio del ciclo '
-                        . '(' . $meses[$mesAncla - 1] . ' ' . $anioRef . ').';
-                }
-            }
         }
 
         return null;

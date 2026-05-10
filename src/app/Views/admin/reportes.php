@@ -143,8 +143,11 @@
                 <label class="text-xs text-uppercase text-muted font-weight-bold">Método de Pago</label>
                 <select name="metodo_pago" class="form-control form-control-sm">
                   <option value="">— Todos —</option>
-                  <option value="Efectivo"      <?= ($filtros['metodoPago'] ?? '') === 'Efectivo'      ? 'selected' : '' ?>>Efectivo</option>
-                  <option value="Transferencia" <?= ($filtros['metodoPago'] ?? '') === 'Transferencia' ? 'selected' : '' ?>>Transferencia</option>
+                  <option value="Efectivo"           <?= ($filtros['metodoPago'] ?? '') === 'Efectivo'           ? 'selected' : '' ?>>Efectivo</option>
+                  <option value="Transferencia"      <?= ($filtros['metodoPago'] ?? '') === 'Transferencia'      ? 'selected' : '' ?>>Transferencia</option>
+                  <option value="Depósito bancario"  <?= ($filtros['metodoPago'] ?? '') === 'Depósito bancario'  ? 'selected' : '' ?>>Depósito bancario</option>
+                  <option value="Tarjeta de débito"  <?= ($filtros['metodoPago'] ?? '') === 'Tarjeta de débito'  ? 'selected' : '' ?>>Tarjeta de débito</option>
+                  <option value="Tarjeta de crédito" <?= ($filtros['metodoPago'] ?? '') === 'Tarjeta de crédito' ? 'selected' : '' ?>>Tarjeta de crédito</option>
                 </select>
               </div>
             </div>
@@ -195,7 +198,16 @@
                 <br><small style="font-size:0.75rem; opacity:0.85;">
                   Efectivo: $<?= number_format((float) $totalEfectivo, 2) ?>
                   &nbsp;|&nbsp;
-                  Transferencia: $<?= number_format((float) $totalTransferencia, 2) ?>
+                  Transfer.: $<?= number_format((float) $totalTransferencia, 2) ?>
+                  <?php if (($totalDeposito ?? 0) > 0): ?>
+                    &nbsp;|&nbsp;Depósito: $<?= number_format((float) $totalDeposito, 2) ?>
+                  <?php endif; ?>
+                  <?php if (($totalTarjetaDebito ?? 0) > 0): ?>
+                    &nbsp;|&nbsp;T. Déb.: $<?= number_format((float) $totalTarjetaDebito, 2) ?>
+                  <?php endif; ?>
+                  <?php if (($totalTarjetaCredito ?? 0) > 0): ?>
+                    &nbsp;|&nbsp;T. Cré.: $<?= number_format((float) $totalTarjetaCredito, 2) ?>
+                  <?php endif; ?>
                 </small>
               <?php endif; ?>
             </p>
@@ -271,13 +283,16 @@
               <th>Cajero</th>
               <th class="text-right">Efectivo</th>
               <th class="text-right">Transferencia</th>
+              <th class="text-right">Depósito</th>
+              <th class="text-right">T. Débito</th>
+              <th class="text-right">T. Crédito</th>
               <th class="text-center">Acciones</th>
             </tr>
           </thead>
           <tbody>
             <?php if (empty($pagos)): ?>
               <tr>
-                <td colspan="10" class="text-center text-muted py-5">
+                <td colspan="13" class="text-center text-muted py-5">
                   <i class="fas fa-search fa-2x mb-2 d-block"></i>
                   No se encontraron pagos con los filtros seleccionados.
                 </td>
@@ -326,11 +341,21 @@
                 </td>
                 <td><?= esc($concepto) ?></td>
                 <td><?= esc($p['nombre_cajero'] ?? 'N/D') ?></td>
+                <?php $__m = $p['metodo_pago'] ?? 'Efectivo'; ?>
                 <td class="text-right font-weight-bold">
-                  <?= ($p['metodo_pago'] ?? '') !== 'Transferencia' ? '$' . number_format((float) $p['monto'], 2) : '<span class="text-muted">—</span>' ?>
+                  <?= in_array($__m, ['Efectivo', ''])    ? '$' . number_format((float) $p['monto'], 2) : '<span class="text-muted">—</span>' ?>
                 </td>
                 <td class="text-right font-weight-bold">
-                  <?= ($p['metodo_pago'] ?? '') === 'Transferencia' ? '$' . number_format((float) $p['monto'], 2) : '<span class="text-muted">—</span>' ?>
+                  <?= $__m === 'Transferencia'            ? '$' . number_format((float) $p['monto'], 2) : '<span class="text-muted">—</span>' ?>
+                </td>
+                <td class="text-right font-weight-bold">
+                  <?= $__m === 'Depósito bancario'        ? '$' . number_format((float) $p['monto'], 2) : '<span class="text-muted">—</span>' ?>
+                </td>
+                <td class="text-right font-weight-bold">
+                  <?= $__m === 'Tarjeta de débito'        ? '$' . number_format((float) $p['monto'], 2) : '<span class="text-muted">—</span>' ?>
+                </td>
+                <td class="text-right font-weight-bold">
+                  <?= $__m === 'Tarjeta de crédito'       ? '$' . number_format((float) $p['monto'], 2) : '<span class="text-muted">—</span>' ?>
                 </td>
                 <td class="text-center text-nowrap">
                   <?php if ($p['tipo_pago'] === 'alumno'): ?>
@@ -387,17 +412,50 @@
                 <td colspan="7" class="text-right">Total Efectivo:</td>
                 <td class="text-right text-success">$<?= number_format((float) $totalEfectivo, 2) ?></td>
                 <td class="text-right text-muted">—</td>
+                <td class="text-right text-muted">—</td>
+                <td class="text-right text-muted">—</td>
+                <td class="text-right text-muted">—</td>
                 <td></td>
               </tr>
               <tr class="font-weight-bold" style="background:#d1ecf1;">
                 <td colspan="7" class="text-right">Total Transferencia:</td>
                 <td class="text-right text-muted">—</td>
                 <td class="text-right text-info">$<?= number_format((float) $totalTransferencia, 2) ?></td>
+                <td class="text-right text-muted">—</td>
+                <td class="text-right text-muted">—</td>
+                <td class="text-right text-muted">—</td>
+                <td></td>
+              </tr>
+              <tr class="font-weight-bold" style="background:#fff3cd;">
+                <td colspan="7" class="text-right">Total Depósito bancario:</td>
+                <td class="text-right text-muted">—</td>
+                <td class="text-right text-muted">—</td>
+                <td class="text-right text-warning">$<?= number_format((float) ($totalDeposito ?? 0), 2) ?></td>
+                <td class="text-right text-muted">—</td>
+                <td class="text-right text-muted">—</td>
+                <td></td>
+              </tr>
+              <tr class="font-weight-bold" style="background:#f8d7da;">
+                <td colspan="7" class="text-right">Total Tarjeta de débito:</td>
+                <td class="text-right text-muted">—</td>
+                <td class="text-right text-muted">—</td>
+                <td class="text-right text-muted">—</td>
+                <td class="text-right text-danger">$<?= number_format((float) ($totalTarjetaDebito ?? 0), 2) ?></td>
+                <td class="text-right text-muted">—</td>
+                <td></td>
+              </tr>
+              <tr class="font-weight-bold" style="background:#e2d9f3;">
+                <td colspan="7" class="text-right">Total Tarjeta de crédito:</td>
+                <td class="text-right text-muted">—</td>
+                <td class="text-right text-muted">—</td>
+                <td class="text-right text-muted">—</td>
+                <td class="text-right text-muted">—</td>
+                <td class="text-right" style="color:#6f42c1;">$<?= number_format((float) ($totalTarjetaCredito ?? 0), 2) ?></td>
                 <td></td>
               </tr>
               <tr class="font-weight-bold" style="background:#003087; color:white;">
                 <td colspan="7" class="text-right">TOTAL:</td>
-                <td colspan="2" class="text-right" style="font-size:1.05rem;">$<?= number_format((float) $totalGeneral, 2) ?></td>
+                <td colspan="5" class="text-right" style="font-size:1.05rem;">$<?= number_format((float) $totalGeneral, 2) ?></td>
                 <td></td>
               </tr>
             <?php endif; ?>

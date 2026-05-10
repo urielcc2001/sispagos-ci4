@@ -207,32 +207,39 @@ class AdeudoModel
         $estado = [];
         for ($mes = 1; $mes <= 12; $mes++) {
 
-            // Modo con ancla: meses anteriores al inicio del ciclo → na
+            $key = $anio . '-' . str_pad($mes, 2, '0', STR_PAD_LEFT);
+
+            // Modo con ancla: meses anteriores al inicio del ciclo → na solo si no tienen pago
             if (! $directa && ($anio < $inscAnio || ($anio === $inscAnio && $inscMes !== null && $mes < $inscMes))) {
-                $estado[] = ['mes' => $mes, 'nombre' => self::$meses[$mes], 'status' => 'na', 'folio_digital' => null, 'abonos' => 0];
-                continue;
+                if (! isset($pagadosData[$key])) {
+                    $estado[] = ['mes' => $mes, 'nombre' => self::$meses[$mes], 'status' => 'na', 'folio_digital' => null, 'abonos' => 0];
+                    continue;
+                }
+                // Tiene pago: cae al bloque normal para mostrar pagado/parcial
             }
 
-            // Modo directa: meses antes del primer pago del año → na
+            // Modo directa: meses antes del primer pago del año → na solo si no tienen pago
             if ($directa && $primerMesPagado !== null && $mes < $primerMesPagado) {
-                $estado[] = ['mes' => $mes, 'nombre' => self::$meses[$mes], 'status' => 'na', 'folio_digital' => null, 'abonos' => 0];
-                continue;
+                if (! isset($pagadosData[$key])) {
+                    $estado[] = ['mes' => $mes, 'nombre' => self::$meses[$mes], 'status' => 'na', 'folio_digital' => null, 'abonos' => 0];
+                    continue;
+                }
             }
 
             // Modo directa sin ningún pago ese año → pasado = na, futuro = futuro
             if ($directa && $primerMesPagado === null) {
-                $esPasado = ($anio < $anioHoy) || ($anio === $anioHoy && $mes <= $mesHoy);
-                $estado[] = [
-                    'mes'           => $mes,
-                    'nombre'        => self::$meses[$mes],
-                    'status'        => $esPasado ? 'na' : 'futuro',
-                    'folio_digital' => null,
-                    'abonos'        => 0,
-                ];
-                continue;
+                if (! isset($pagadosData[$key])) {
+                    $esPasado = ($anio < $anioHoy) || ($anio === $anioHoy && $mes <= $mesHoy);
+                    $estado[] = [
+                        'mes'           => $mes,
+                        'nombre'        => self::$meses[$mes],
+                        'status'        => $esPasado ? 'na' : 'futuro',
+                        'folio_digital' => null,
+                        'abonos'        => 0,
+                    ];
+                    continue;
+                }
             }
-
-            $key = $anio . '-' . str_pad($mes, 2, '0', STR_PAD_LEFT);
 
             if (isset($pagadosData[$key])) {
                 $data         = $pagadosData[$key];
@@ -463,13 +470,16 @@ class AdeudoModel
         $meses       = [];
 
         for ($mes = 1; $mes <= 12; $mes++) {
-            // Meses anteriores al ancla del ciclo → no aplica
-            if (! $directa && ($anio < $anioAncla || ($anio === $anioAncla && $mesAncla !== null && $mes < $mesAncla))) {
-                $meses[] = ['mes' => $mes, 'nombre' => self::$meses[$mes], 'status' => 'na', 'folio_digital' => null, 'abonos' => 0, 'abonos_detalle' => []];
-                continue;
-            }
-
             $key = $anio . '-' . str_pad($mes, 2, '0', STR_PAD_LEFT);
+
+            // Meses anteriores al ancla: na solo si no tienen pago registrado
+            if (! $directa && ($anio < $anioAncla || ($anio === $anioAncla && $mesAncla !== null && $mes < $mesAncla))) {
+                if (! isset($pagadosData[$key])) {
+                    $meses[] = ['mes' => $mes, 'nombre' => self::$meses[$mes], 'status' => 'na', 'folio_digital' => null, 'abonos' => 0, 'abonos_detalle' => []];
+                    continue;
+                }
+                // Tiene pago registrado: cae al bloque normal para mostrar pagado/parcial
+            }
 
             if (isset($pagadosData[$key])) {
                 // 'pagado' = tiene al menos un pago completo; 'parcial' = solo abonos

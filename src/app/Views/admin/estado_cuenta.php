@@ -165,83 +165,137 @@
         </div>
         <div class="card-body p-0">
           <?php if (! empty($inscripciones)): ?>
-          <table class="table table-sm table-striped mb-0">
+          <?php
+            // Agrupar por concepto + periodo_pago
+            $gruposInsc = [];
+            foreach ($inscripciones as $p) {
+                $gKey = $p['concepto'] . '_' . ($p['periodo_pago'] ?? '0');
+                $gruposInsc[$gKey][] = $p;
+            }
+
+            // Helper: calcular label de periodo
+            $periodoLabelFn = function (array $p): string {
+                $num    = ! empty($p['periodo_pago']) ? (int) $p['periodo_pago'] : null;
+                $plan   = $p['detalle_tramite'] ?? '';
+                $nivelP = $p['nivel'] ?? '';
+                if ($num) {
+                    if ($plan === 'Semestral') {
+                        $r = ($num % 2 !== 0) ? 'Ago – Dic' : 'Feb – Jul';
+                        return 'Semestre ' . $num . ' (' . $r . ')';
+                    } elseif ($nivelP === 'uni' || $plan === 'Cuatrimestral') {
+                        $mod = $num % 3;
+                        $r   = $mod === 1 ? 'Ene – Abr' : ($mod === 2 ? 'May – Ago' : 'Sep – Dic');
+                        return 'Cuatrimestre ' . $num . ' (' . $r . ')';
+                    } else {
+                        $label = 'Periodo ' . $num;
+                        if (! empty($p['tipo_periodo'])) $label .= ' — ' . $p['tipo_periodo'];
+                        return $label;
+                    }
+                }
+                $mesRef = ! empty($p['mes_inicio_ciclo'])
+                          ? (int) $p['mes_inicio_ciclo']
+                          : (int) date('n', strtotime($p['created_at']));
+                if ($mesRef <= 4)     return 'Cuatrimestre 1 (Ene – Abr)';
+                elseif ($mesRef <= 8) return 'Cuatrimestre 2 (May – Ago)';
+                else                  return 'Cuatrimestre 3 (Sep – Dic)';
+            };
+          ?>
+          <table class="table table-sm mb-0">
             <thead class="thead-light">
               <tr>
                 <th style="width:150px">Concepto</th>
                 <th>Periodo</th>
-                <th style="width:110px">Fecha de Pago</th>
+                <th style="width:130px">Tipo de pago</th>
+                <th style="width:110px">Fecha</th>
                 <th>Folio</th>
                 <th class="text-right" style="width:120px">Monto</th>
-                <th style="width:60px">Acciones</th>
+                <th style="width:60px"></th>
               </tr>
             </thead>
             <tbody>
-              <?php foreach ($inscripciones as $p): ?>
+              <?php foreach ($gruposInsc as $pagosGrupo): ?>
               <?php
-                $num    = ! empty($p['periodo_pago']) ? (int) $p['periodo_pago'] : null;
-                $plan   = $p['detalle_tramite'] ?? '';
-                $nivelP = $p['nivel'] ?? '';
-
-                if ($num) {
-                    if ($plan === 'Semestral') {
-                        $rango        = ($num % 2 !== 0) ? 'Ago – Dic' : 'Feb – Jul';
-                        $periodoLabel = 'Semestre ' . $num . ' (' . $rango . ')';
-                    } elseif ($nivelP === 'uni' || $plan === 'Cuatrimestral') {
-                        $mod          = $num % 3;
-                        if ($mod === 1)     $rango = 'Ene – Abr';
-                        elseif ($mod === 2) $rango = 'May – Ago';
-                        else                $rango = 'Sep – Dic';
-                        $periodoLabel = 'Cuatrimestre ' . $num . ' (' . $rango . ')';
-                    } else {
-                        $periodoLabel = 'Periodo ' . $num;
-                        if (! empty($p['tipo_periodo'])) {
-                            $periodoLabel .= ' — ' . $p['tipo_periodo'];
-                        }
-                    }
-                } else {
-                    // Fallback cuando no hay periodo_pago registrado
-                    $mesRef = ! empty($p['mes_inicio_ciclo'])
-                              ? (int) $p['mes_inicio_ciclo']
-                              : (int) date('n', strtotime($p['created_at']));
-                    if ($mesRef <= 4)     $periodoLabel = 'Cuatrimestre 1 (Ene – Abr)';
-                    elseif ($mesRef <= 8) $periodoLabel = 'Cuatrimestre 2 (May – Ago)';
-                    else                  $periodoLabel = 'Cuatrimestre 3 (Sep – Dic)';
-                }
+                $primerPago    = $pagosGrupo[0];
+                $tieneCompleto = (bool) count(array_filter($pagosGrupo, fn($x) => $x['num_abono'] === null));
+                $tieneAbonos   = (bool) count(array_filter($pagosGrupo, fn($x) => $x['num_abono'] !== null));
+                $esMultiple    = count($pagosGrupo) > 1;
+                $totalGrupo    = array_sum(array_column($pagosGrupo, 'monto'));
+                $periodoLabel  = $periodoLabelFn($primerPago);
               ?>
-              <tr>
+
+              <?php if ($esMultiple): ?>
+              <!-- Fila cabecera de grupo -->
+              <tr class="table-light">
                 <td>
-                  <?php if ($p['concepto'] === 'inscripcion'): ?>
-                    <span class="badge badge-success px-2 py-1">
-                      <i class="fas fa-star mr-1"></i>Inscripción
-                    </span>
+                  <?php if ($primerPago['concepto'] === 'inscripcion'): ?>
+                    <span class="badge badge-success px-2 py-1"><i class="fas fa-star mr-1"></i>Inscripción</span>
                   <?php else: ?>
-                    <span class="badge badge-info px-2 py-1">
-                      <i class="fas fa-redo mr-1"></i>Reinscripción
-                    </span>
+                    <span class="badge badge-info px-2 py-1"><i class="fas fa-redo mr-1"></i>Reinscripción</span>
                   <?php endif; ?>
                 </td>
                 <td>
-                  <span class="text-sm">
+                  <i class="fas fa-layer-group mr-1 text-muted"></i><strong><?= $periodoLabel ?></strong>
+                </td>
+                <td>
+                  <?php if ($tieneCompleto): ?>
+                    <span class="badge badge-success px-2 py-1"><i class="fas fa-check-circle mr-1"></i>Pagado completo</span>
+                  <?php else: ?>
+                    <span class="badge badge-warning text-dark px-2 py-1"><i class="fas fa-adjust mr-1"></i>Con abonos — pendiente</span>
+                  <?php endif; ?>
+                </td>
+                <td colspan="2" class="text-muted small"><i class="fas fa-list-ul mr-1"></i><?= count($pagosGrupo) ?> registro(s)</td>
+                <td class="text-right font-weight-bold <?= $tieneCompleto ? 'text-success' : 'text-warning' ?>">
+                  $<?= number_format($totalGrupo, 2) ?>
+                </td>
+                <td></td>
+              </tr>
+              <?php endif; ?>
+
+              <?php foreach ($pagosGrupo as $p): ?>
+              <tr <?= $esMultiple ? 'class="table-sm"' : '' ?>>
+                <td <?= $esMultiple ? 'class="pl-4"' : '' ?>>
+                  <?php if (! $esMultiple): ?>
+                    <?php if ($p['concepto'] === 'inscripcion'): ?>
+                      <span class="badge badge-success px-2 py-1"><i class="fas fa-star mr-1"></i>Inscripción</span>
+                    <?php else: ?>
+                      <span class="badge badge-info px-2 py-1"><i class="fas fa-redo mr-1"></i>Reinscripción</span>
+                    <?php endif; ?>
+                  <?php else: ?>
+                    <i class="fas fa-level-up-alt fa-rotate-90 text-muted ml-2"></i>
+                  <?php endif; ?>
+                </td>
+                <td>
+                  <?php if (! $esMultiple): ?>
                     <i class="fas fa-layer-group mr-1 text-muted"></i><?= $periodoLabel ?>
-                  </span>
+                  <?php endif; ?>
+                </td>
+                <td>
+                  <?php if ($p['num_abono'] === null): ?>
+                    <span class="badge badge-success px-2 py-1">
+                      <i class="fas fa-check-circle mr-1"></i>Pago completo
+                    </span>
+                  <?php else: ?>
+                    <span class="badge badge-warning text-dark px-2 py-1">
+                      <i class="fas fa-adjust mr-1"></i>Abono <?= (int) $p['num_abono'] ?>
+                    </span>
+                  <?php endif; ?>
                 </td>
                 <td><?= date('d/m/Y', strtotime($p['created_at'])) ?></td>
-                <td><code class="text-muted"><?= esc($p['folio_digital'] ?? '—') ?></code></td>
+                <td><code class="text-muted" style="font-size:.72rem"><?= esc($p['folio_digital'] ?? '—') ?></code></td>
                 <td class="text-right font-weight-bold text-success">
                   $<?= number_format((float) $p['monto'], 2) ?>
                 </td>
                 <td class="text-center">
                   <?php if (! empty($p['folio_digital'])): ?>
                   <a href="<?= base_url('pagos/comprobante/' . urlencode($p['folio_digital'])) ?>"
-                     target="_blank"
-                     class="btn btn-xs btn-default border"
-                     title="Reimprimir comprobante">
+                     target="_blank" class="btn btn-xs btn-default border" title="Reimprimir">
                     <i class="fas fa-print"></i>
                   </a>
                   <?php endif; ?>
                 </td>
               </tr>
+              <?php endforeach; ?>
+
               <?php endforeach; ?>
             </tbody>
           </table>

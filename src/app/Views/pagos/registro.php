@@ -381,6 +381,35 @@
               </div>
             </div>
 
+            <!-- Abono para inscripción / reinscripción -->
+            <div id="grupo-abono-periodo" class="border rounded p-2 mt-2 bg-light" style="display:none">
+              <div id="resumen-abonos-periodo" class="mb-2 px-2 py-1 rounded" style="display:none; background:#fff8e1; border-left:3px solid #ffc107;"></div>
+              <div class="form-check mb-1">
+                <input class="form-check-input" type="checkbox" id="chk-es-abono-periodo">
+                <label class="form-check-label font-weight-bold" for="chk-es-abono-periodo">
+                  ¿Es un pago parcial (abono)?
+                </label>
+              </div>
+              <div id="sel-num-abono-periodo-wrapper" class="ml-4" style="display:none">
+                <label for="sel-num-abono-periodo" class="small text-muted mb-1">Número de abono:</label>
+                <select name="num_abono" id="sel-num-abono-periodo" class="form-control form-control-sm" style="width:160px" disabled>
+                  <option value="1">Abono 1</option>
+                  <option value="2">Abono 2</option>
+                  <option value="3">Abono 3</option>
+                  <option value="4">Abono 4</option>
+                </select>
+                <div class="form-check mt-2" id="wrap-cierra-periodo" style="display:none">
+                  <input class="form-check-input" type="checkbox" id="chk-cierra-periodo">
+                  <label class="form-check-label font-weight-bold text-success" for="chk-cierra-periodo">
+                    <i class="fas fa-check-circle mr-1"></i>¿Este pago cierra el adeudo del periodo?
+                  </label>
+                  <small class="d-block text-muted" style="font-size:.75rem">
+                    El periodo quedará marcado en verde (pagado completo).
+                  </small>
+                </div>
+              </div>
+            </div>
+
           </div><!-- /grupo-dinamico -->
 
           <input type="hidden" name="periodo_pago" id="periodo_pago_val">
@@ -395,6 +424,9 @@
                 <select name="metodo_pago" id="metodo_pago" class="form-control">
                   <option value="Efectivo" selected>Efectivo</option>
                   <option value="Transferencia">Transferencia</option>
+                  <option value="Depósito bancario">Depósito bancario</option>
+                  <option value="Tarjeta de débito">Tarjeta de débito</option>
+                  <option value="Tarjeta de crédito">Tarjeta de crédito</option>
                 </select>
               </div>
             </div>
@@ -641,6 +673,7 @@ $(function () {
             }
           }
           sugerirPeriodo();
+          cargarEstadoPeriodos();
           verificarAdeudos(numControl, nivel);
           if ($('#concepto').val() === 'mensualidad' && nivel !== 'posgrado') {
             cargarMesesMensualidad();
@@ -700,7 +733,15 @@ $(function () {
       $('#sel-modalidad-prepa').prop('disabled', false).removeClass('bg-light');
       window._posgradoMaterias  = [];
       window._uniTipoPeriodo    = null;
-      $('#grupo-dinamico, #grupo-tipo-periodo, #grupo-bach-tipo, #grupo-selector-periodo, #grupo-materia-posgrado, #grupo-meses-mensualidad').hide();
+      window._periodoStatusMap  = {};
+      window._periodoDetalleMap = {};
+      $('#grupo-dinamico, #grupo-tipo-periodo, #grupo-bach-tipo, #grupo-selector-periodo, #grupo-materia-posgrado, #grupo-meses-mensualidad, #grupo-abono-periodo').hide();
+      $('#chk-es-abono-periodo').prop('checked', false);
+      $('#sel-num-abono-periodo').prop('disabled', true).val('1');
+      $('#sel-num-abono-periodo-wrapper').hide();
+      $('#chk-cierra-periodo').prop('checked', false);
+      $('#wrap-cierra-periodo').hide();
+      $('#resumen-abonos-periodo').hide().empty();
       $('#nombre_alumno').prop('readonly', true).removeClass('is-valid is-invalid');
       $('#periodo_pago_val, #tipo_periodo_val, #detalle_tramite_val, #mes_inicio_ciclo_val').val('');
       $('#sel-modalidad-prepa').val('');
@@ -785,10 +826,13 @@ $(function () {
     $btn.prop('disabled', true).html('<i class="fas fa-spinner fa-spin mr-1"></i> Procesando...');
 
     // Si "cierra el adeudo" está marcado, no enviar num_abono → se guarda como pago completo
-    const cierraMes = $('#chk-cierra-mes').is(':checked');
-    if (cierraMes) $('#sel-num-abono').prop('disabled', true);
+    const cierraMes     = $('#chk-cierra-mes').is(':checked');
+    const cierraPeriodo = $('#chk-cierra-periodo').is(':checked');
+    if (cierraMes)     $('#sel-num-abono').prop('disabled', true);
+    if (cierraPeriodo) $('#sel-num-abono-periodo').prop('disabled', true);
     const formData = $('#form-pago').serialize();
-    if (cierraMes) $('#sel-num-abono').prop('disabled', false);
+    if (cierraMes)     $('#sel-num-abono').prop('disabled', false);
+    if (cierraPeriodo) $('#sel-num-abono-periodo').prop('disabled', false);
 
     $.ajax({
       url    : BASE_URL + 'pagos/registrar',
@@ -857,7 +901,54 @@ $(function () {
   const MESES = ['Enero','Febrero','Marzo','Abril','Mayo','Junio',
                  'Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
 
-  window._posgradoMaterias = [];
+  window._posgradoMaterias  = [];
+  window._periodoStatusMap  = {};
+  window._periodoDetalleMap = {};
+
+  // ── Estado de periodos (inscripcion / reinscripcion) ─────────────
+  function cargarEstadoPeriodos() {
+    const numControl = $('#num_control').val().trim();
+    const nivel      = $('#nivel').val();
+    const concepto   = $('#concepto').val();
+    if (!numControl || !nivel || !['inscripcion','reinscripcion'].includes(concepto)) return;
+
+    window._periodoStatusMap  = {};
+    window._periodoDetalleMap = {};
+
+    $.get(BASE_URL + 'pagos/estado-periodos', { num_control: numControl, nivel: nivel, concepto: concepto })
+      .done(function (res) {
+        window._periodoStatusMap  = res.status_map  || {};
+        window._periodoDetalleMap = res.detalle_map || {};
+        aplicarEstadoPeriodos();
+      });
+  }
+
+  function aplicarEstadoPeriodos() {
+    $('#btn-periodo-grid .btn-num-periodo').each(function () {
+      const val    = parseInt($(this).data('val'));
+      const estado = window._periodoStatusMap[val];
+
+      $(this).removeClass('btn-outline-primary btn-success btn-warning text-dark')
+             .addClass('btn-outline-primary')
+             .prop('disabled', false)
+             .css('opacity', '1')
+             .html(val);
+
+      if (!estado) return;
+
+      if (estado.tiene_completo) {
+        $(this).removeClass('btn-outline-primary')
+               .addClass('btn-success')
+               .prop('disabled', true)
+               .css('opacity', '.85')
+               .html('<i class="fas fa-check mr-1"></i>' + val);
+      } else {
+        $(this).removeClass('btn-outline-primary')
+               .addClass('btn-warning text-dark')
+               .html('<i class="fas fa-exclamation-triangle mr-1" style="font-size:.75em"></i>' + val);
+      }
+    });
+  }
 
   // ── Mes inicio ciclo change → hidden field ───────────────────────
   $('#sel-mes-inicio').on('change', function () {
@@ -1108,19 +1199,13 @@ $(function () {
         return;
       }
 
-      if (m.status === 'na') {
-        $grid.append(
-          $('<span>').addClass('btn btn-outline-secondary btn-sm mr-1 mb-1')
-            .css({'min-width':'68px', 'cursor':'not-allowed', 'opacity':'.5'})
-            .html('<i class="fas fa-minus mr-1"></i>' + abrev)
-        );
-        return;
-      }
-
-      // Seleccionable: pendiente | parcial | futuro
+      // Seleccionable: pendiente | parcial | futuro | na
       let btnCls, icon;
       if (m.status === 'pendiente') {
         btnCls = 'btn-danger';
+        icon   = '';
+      } else if (m.status === 'na') {
+        btnCls = 'btn-outline-secondary';
         icon   = '';
       } else if (m.status === 'parcial') {
         btnCls = 'btn-warning';
@@ -1232,7 +1317,15 @@ $(function () {
     const concepto = $('#concepto').val();
 
     $('#grupo-dinamico').hide();
-    $('#grupo-tipo-periodo, #grupo-bach-tipo, #grupo-selector-periodo, #grupo-materia-posgrado, #grupo-mes-inicio, #grupo-meses-mensualidad').hide();
+    $('#grupo-tipo-periodo, #grupo-bach-tipo, #grupo-selector-periodo, #grupo-materia-posgrado, #grupo-mes-inicio, #grupo-meses-mensualidad, #grupo-abono-periodo').hide();
+    $('#chk-es-abono-periodo').prop('checked', false);
+    $('#sel-num-abono-periodo').prop('disabled', true).val('1');
+    $('#sel-num-abono-periodo-wrapper').hide();
+    $('#chk-cierra-periodo').prop('checked', false);
+    $('#wrap-cierra-periodo').hide();
+    $('#resumen-abonos-periodo').hide().empty();
+    window._periodoStatusMap  = {};
+    window._periodoDetalleMap = {};
     $('#periodo_pago_val, #tipo_periodo_val, #detalle_tramite_val').val('');
     $('#grid-materias-posgrado').html('<span class="text-muted small">Busca al alumno para ver las materias del programa.</span>');
     $('#badge-materia-seleccionada').hide();
@@ -1278,6 +1371,7 @@ $(function () {
 
       generarBotonesGrid(1, 1, 'num');
       $('#grupo-selector-periodo').show();
+      cargarEstadoPeriodos();
 
     } else if (concepto === 'reinscripcion') {
       $('#grupo-tipo-periodo').show();
@@ -1303,6 +1397,7 @@ $(function () {
 
       $('#grupo-selector-periodo').show();
       sugerirPeriodo();
+      cargarEstadoPeriodos();
     }
   }
 
@@ -1349,6 +1444,9 @@ $(function () {
     if (!periodoNum) return '';
     let txt = 'Periodo ' + periodoNum;
     if (tipo) txt += ' — ' + tipo;
+    if ($('#chk-es-abono-periodo').is(':checked') && !$('#chk-cierra-periodo').is(':checked') && $('#sel-num-abono-periodo').val()) {
+      txt += ' — Abono ' + $('#sel-num-abono-periodo').val();
+    }
     return txt;
   }
 
@@ -1400,9 +1498,79 @@ $(function () {
 
   // ── Handlers botones dinámicos ──────────────────────────────────
   $(document).on('click', '.btn-num-periodo:not(:disabled)', function () {
-    $('.btn-num-periodo').removeClass('btn-primary active').addClass('btn-outline-primary');
-    $(this).removeClass('btn-outline-primary').addClass('btn-primary active');
-    $('#periodo_pago_val').val($(this).data('val'));
+    // Restaurar color original de todos los botones
+    $('#btn-periodo-grid .btn-num-periodo:not(:disabled)').each(function () {
+      const v      = parseInt($(this).data('val'));
+      const estado = window._periodoStatusMap[v];
+      $(this).removeClass('btn-primary active');
+      if (estado && !estado.tiene_completo) {
+        $(this).addClass('btn-warning text-dark');
+      } else {
+        $(this).addClass('btn-outline-primary');
+      }
+    });
+
+    // Marcar el seleccionado
+    const esParcial = $(this).hasClass('btn-warning');
+    $(this).removeClass('btn-outline-primary btn-warning text-dark').addClass('btn-primary active');
+    const val = parseInt($(this).data('val'));
+    $('#periodo_pago_val').val(val);
+
+    const concepto = $('#concepto').val();
+    if (concepto === 'inscripcion' || concepto === 'reinscripcion') {
+      const estado  = window._periodoStatusMap[val] || null;
+      const detalle = window._periodoDetalleMap[val] || [];
+
+      $('#grupo-abono-periodo').show();
+      $('#resumen-abonos-periodo').hide().empty();
+
+      if (estado && !estado.tiene_completo && estado.num_abonos > 0) {
+        // Periodo con abonos parciales: auto-activar y sugerir siguiente
+        if (!$('#chk-es-abono-periodo').is(':checked')) {
+          $('#chk-es-abono-periodo').prop('checked', true).trigger('change');
+        }
+        $('#sel-num-abono-periodo').val(Math.min(estado.num_abonos + 1, 4));
+        $('#wrap-cierra-periodo').show();
+
+        if (detalle.length > 0) {
+          let totalPagado = 0;
+          let html = '<p class="mb-1 small font-weight-bold" style="color:#856404"><i class="fas fa-history mr-1"></i>Abonos ya registrados:</p>';
+          detalle.forEach(function (a) {
+            totalPagado += a.monto;
+            const label = a.num_abono !== null ? 'Abono ' + a.num_abono : 'Pago completo';
+            html += '<div class="d-flex justify-content-between small">' +
+              '<span class="text-muted">' + label + ' <small>(' + (a.fecha || '') + ')</small></span>' +
+              '<span class="font-weight-bold">$' + a.monto.toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, ',') + '</span>' +
+              '</div>';
+          });
+          html += '<div class="d-flex justify-content-between small font-weight-bold border-top mt-1 pt-1">' +
+            '<span>Total pagado hasta ahora:</span>' +
+            '<span class="text-success">$' + totalPagado.toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, ',') + '</span>' +
+            '</div>';
+          $('#resumen-abonos-periodo').html(html).show();
+        }
+      } else {
+        // Periodo limpio: resetear abono
+        $('#chk-es-abono-periodo').prop('checked', false).trigger('change');
+      }
+    }
+  });
+
+  $(document).on('change', '#chk-es-abono-periodo', function () {
+    const checked = $(this).is(':checked');
+    $('#sel-num-abono-periodo-wrapper').toggle(checked);
+    $('#sel-num-abono-periodo').prop('disabled', !checked);
+    if (!checked) {
+      $('#sel-num-abono-periodo').val('1');
+      $('#chk-cierra-periodo').prop('checked', false);
+      $('#wrap-cierra-periodo').hide();
+    } else {
+      const val    = parseInt($('#periodo_pago_val').val());
+      const estado = window._periodoStatusMap[val] || null;
+      if (estado && !estado.tiene_completo && estado.num_abonos > 0) {
+        $('#wrap-cierra-periodo').show();
+      }
+    }
   });
 
   $(document).on('click', '.btn-tipo-periodo', function () {

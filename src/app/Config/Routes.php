@@ -36,6 +36,7 @@ $routes->get('admin/estado-cuenta', 'AdminController::estadoCuenta');
 $routes->get('admin/morosos', 'AdminController::morosos');
 $routes->get('pagos/verificar-adeudos', 'PagosController::verificarAdeudos');
 $routes->get('pagos/estado-mensualidades', 'PagosController::estadoMensualidades');
+$routes->get('pagos/estado-periodos',     'PagosController::estadoPeriodos');
 
 // Configuración de usuario
 $routes->get('configuracion', 'ConfiguracionController::index');

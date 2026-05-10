@@ -122,8 +122,11 @@
                 <div class="form-group">
                   <label for="metodo_pago">Método de Pago</label>
                   <select name="metodo_pago" id="metodo_pago" class="form-control">
-                    <option value="Efectivo"      <?= ($pago['metodo_pago'] ?? '') === 'Efectivo'      ? 'selected' : '' ?>>Efectivo</option>
-                    <option value="Transferencia" <?= ($pago['metodo_pago'] ?? '') === 'Transferencia' ? 'selected' : '' ?>>Transferencia</option>
+                    <option value="Efectivo"           <?= ($pago['metodo_pago'] ?? '') === 'Efectivo'           ? 'selected' : '' ?>>Efectivo</option>
+                    <option value="Transferencia"      <?= ($pago['metodo_pago'] ?? '') === 'Transferencia'      ? 'selected' : '' ?>>Transferencia</option>
+                    <option value="Depósito bancario"  <?= ($pago['metodo_pago'] ?? '') === 'Depósito bancario'  ? 'selected' : '' ?>>Depósito bancario</option>
+                    <option value="Tarjeta de débito"  <?= ($pago['metodo_pago'] ?? '') === 'Tarjeta de débito'  ? 'selected' : '' ?>>Tarjeta de débito</option>
+                    <option value="Tarjeta de crédito" <?= ($pago['metodo_pago'] ?? '') === 'Tarjeta de crédito' ? 'selected' : '' ?>>Tarjeta de crédito</option>
                   </select>
                 </div>
               </div>

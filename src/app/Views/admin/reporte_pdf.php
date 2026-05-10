@@ -163,10 +163,20 @@ if ($origen === 'alumnos')       $origenLabel = ' - Solo Alumnos';
 elseif ($origen === 'externos')  $origenLabel = ' - Solo Externos';
 else                             $origenLabel = '';
 
-$numRegistros          = count($pagos);
-$totalEfectivoPdf      = (float) ($totalEfectivo      ?? 0);
-$totalTransferenciaPdf = (float) ($totalTransferencia ?? 0);
-$hayAmbosMetodos       = $totalEfectivoPdf > 0 && $totalTransferenciaPdf > 0;
+$numRegistros           = count($pagos);
+$totalEfectivoPdf       = (float) ($totalEfectivo       ?? 0);
+$totalTransferenciaPdf  = (float) ($totalTransferencia  ?? 0);
+$totalDepositoPdf       = (float) ($totalDeposito       ?? 0);
+$totalTarjetaDebitoPdf  = (float) ($totalTarjetaDebito  ?? 0);
+$totalTarjetaCreditoPdf = (float) ($totalTarjetaCredito ?? 0);
+$subtotalesPdf = array_filter([
+    'Efectivo'          => $totalEfectivoPdf,
+    'Transferencia'     => $totalTransferenciaPdf,
+    'Dep. Bancario'     => $totalDepositoPdf,
+    'T. Débito'         => $totalTarjetaDebitoPdf,
+    'T. Crédito'        => $totalTarjetaCreditoPdf,
+], fn($v) => $v > 0);
+$hayVariosMetodosPdf = count($subtotalesPdf) > 1;
 ?>
 
 <div class="header-wrap">
@@ -182,22 +192,25 @@ $hayAmbosMetodos       = $totalEfectivoPdf > 0 && $totalTransferenciaPdf > 0;
 <table>
   <thead>
     <tr>
-      <th style="width:12%">Folio</th>
-      <th style="width:5%">Tipo</th>
-      <th style="width:7%">Fecha</th>
-      <th style="width:14%">Nombre</th>
-      <th style="width:12%">Concepto</th>
-      <th style="width:6%">Nivel</th>
-      <th style="width:9%">Cajero</th>
-      <th class="r" style="width:8%">Efectivo</th>
-      <th class="r" style="width:8%">Transferencia</th>
-      <th style="width:19%">Observaciones</th>
+      <th style="width:11%">Folio</th>
+      <th style="width:4%">Tipo</th>
+      <th style="width:6%">Fecha</th>
+      <th style="width:13%">Nombre</th>
+      <th style="width:11%">Concepto</th>
+      <th style="width:5%">Nivel</th>
+      <th style="width:7%">Cajero</th>
+      <th class="r" style="width:7%">Efectivo</th>
+      <th class="r" style="width:7%">Transf.</th>
+      <th class="r" style="width:7%">Dep. Ban.</th>
+      <th class="r" style="width:7%">T. Déb.</th>
+      <th class="r" style="width:7%">T. Cré.</th>
+      <th style="width:8%">Observaciones</th>
     </tr>
   </thead>
   <tbody>
     <?php if (empty($pagos)): ?>
     <tr>
-      <td colspan="10" style="text-align:center; padding:14pt; color:#aaa;">
+      <td colspan="13" style="text-align:center; padding:14pt; color:#aaa;">
         No se encontraron registros con los filtros aplicados.
       </td>
     </tr>
@@ -229,31 +242,36 @@ $hayAmbosMetodos       = $totalEfectivoPdf > 0 && $totalTransferenciaPdf > 0;
       <td><?= esc($concepto) ?></td>
       <td><?= esc($nivelLabel) ?></td>
       <td><?= esc($p['nombre_cajero'] ?? 'N/D') ?></td>
-      <td class="monto"><?= ($p['metodo_pago'] ?? '') !== 'Transferencia' ? '$' . number_format((float) $p['monto'], 2) : '—' ?></td>
-      <td class="monto"><?= ($p['metodo_pago'] ?? '') === 'Transferencia' ? '$' . number_format((float) $p['monto'], 2) : '—' ?></td>
+      <?php $__m = $p['metodo_pago'] ?? 'Efectivo'; ?>
+      <td class="monto"><?= in_array($__m, ['Efectivo', ''])    ? '$' . number_format((float) $p['monto'], 2) : '—' ?></td>
+      <td class="monto"><?= $__m === 'Transferencia'            ? '$' . number_format((float) $p['monto'], 2) : '—' ?></td>
+      <td class="monto"><?= $__m === 'Depósito bancario'        ? '$' . number_format((float) $p['monto'], 2) : '—' ?></td>
+      <td class="monto"><?= $__m === 'Tarjeta de débito'        ? '$' . number_format((float) $p['monto'], 2) : '—' ?></td>
+      <td class="monto"><?= $__m === 'Tarjeta de crédito'       ? '$' . number_format((float) $p['monto'], 2) : '—' ?></td>
       <td class="obs"><?= ! empty($p['observaciones']) ? esc($p['observaciones']) : '—' ?></td>
     </tr>
     <?php endforeach; ?>
 
-    <?php if ($hayAmbosMetodos): ?>
+    <?php if ($hayVariosMetodosPdf): ?>
+    <?php foreach ($subtotalesPdf as $__label => $__sub): ?>
     <tr class="subtotal-row">
-      <td colspan="8" class="r" style="padding-right:8pt;">Total Efectivo</td>
-      <td class="r">$<?= number_format($totalEfectivoPdf, 2) ?></td>
-      <td class="r">—</td>
+      <td colspan="7" class="r" style="padding-right:8pt;">Total <?= esc($__label) ?></td>
+      <td class="r"><?= $__label === 'Efectivo'      ? '$' . number_format($__sub, 2) : '—' ?></td>
+      <td class="r"><?= $__label === 'Transferencia' ? '$' . number_format($__sub, 2) : '—' ?></td>
+      <td class="r"><?= $__label === 'Dep. Bancario' ? '$' . number_format($__sub, 2) : '—' ?></td>
+      <td class="r"><?= $__label === 'T. Débito'     ? '$' . number_format($__sub, 2) : '—' ?></td>
+      <td class="r"><?= $__label === 'T. Crédito'    ? '$' . number_format($__sub, 2) : '—' ?></td>
+      <td></td>
     </tr>
-    <tr class="subtotal-row">
-      <td colspan="8" class="r" style="padding-right:8pt;">Total Transferencia</td>
-      <td class="r">—</td>
-      <td class="r">$<?= number_format($totalTransferenciaPdf, 2) ?></td>
-    </tr>
+    <?php endforeach; ?>
     <?php endif; ?>
 
     <?php endif; ?>
   </tbody>
   <tfoot>
     <tr>
-      <td colspan="8" class="r" style="padding-right:8pt; letter-spacing:0.3pt;">TOTAL</td>
-      <td colspan="2" class="r" style="font-size:9pt;">$<?= number_format((float) $totalGeneral, 2) ?></td>
+      <td colspan="7" class="r" style="padding-right:8pt; letter-spacing:0.3pt;">TOTAL</td>
+      <td colspan="6" class="r" style="font-size:9pt;">$<?= number_format((float) $totalGeneral, 2) ?></td>
     </tr>
   </tfoot>
 </table>

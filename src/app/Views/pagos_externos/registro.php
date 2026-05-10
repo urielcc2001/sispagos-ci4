@@ -112,6 +112,9 @@
                     <select name="metodo_pago" id="metodo_pago" class="form-control">
                       <option value="Efectivo">Efectivo</option>
                       <option value="Transferencia">Transferencia</option>
+                      <option value="Depósito bancario">Depósito bancario</option>
+                      <option value="Tarjeta de débito">Tarjeta de débito</option>
+                      <option value="Tarjeta de crédito">Tarjeta de crédito</option>
                     </select>
                   </div>
                 </div>
