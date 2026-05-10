@@ -15,6 +15,9 @@ Thumbs.db
 ehthumbs.db
 Desktop.ini
 
+# Windows alternate data streams (Zone.Identifier, etc.)
+*Zone.Identifier
+
 # Recycle Bin used on file shares
 $RECYCLE.BIN/
 
