@@ -277,7 +277,7 @@ $hayVariosMetodosPdf = count($subtotalesPdf) > 1;
 </table>
 
 <div class="footer">
-  SistemaPagos &copy; <?= date('Y') ?> — Documento generado automaticamente. No requiere firma.
+  SistemaPagos &copy; <?= date('Y') ?> — Documento generado automaticamente.
 </div>
 
 </body>
