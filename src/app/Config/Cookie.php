@@ -27,7 +27,7 @@ class Cookie extends BaseConfig
      *
      * @var DateTimeInterface|int|string
      */
-    public $expires = 0;
+    public $expires = 28800; // 8 horas — el cookie persiste aunque se cierre el navegador
 
     /**
      * --------------------------------------------------------------------------
