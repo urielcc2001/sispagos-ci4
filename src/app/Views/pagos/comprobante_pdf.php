@@ -131,11 +131,14 @@ body {
     font-size: 16pt;
     font-weight: bold;
     color: #003087;
+    display: inline;
 }
 .monto-letras {
     font-size: 8.5pt;
     color: #444;
-    margin-top: 1pt;
+    display: inline;
+    margin-left: 5pt;
+    vertical-align: middle;
 }
 
 /* ── Firma / pie ────────────────────────────── */
@@ -153,7 +156,7 @@ body {
 .firma-linea {
     border-top: 0.75pt solid #aaa;
     width: 120pt;
-    margin-top: 18pt;
+    margin-top: 12pt;
     margin-bottom: 2pt;
 }
 
@@ -262,38 +265,45 @@ foreach ($copias as $copia):
       <td class="lbl">Cajero</td>
       <td class="val"><?= esc($nombreCajero) ?></td>
     </tr>
+    <?php if (! empty($pago['observaciones'])): ?>
+    <tr>
+      <td class="lbl">Observaciones</td>
+      <td class="val" colspan="3"><?= esc($pago['observaciones']) ?></td>
+    </tr>
+    <?php endif; ?>
   </table>
 
   <!-- Monto -->
   <table class="monto-table">
     <tr>
       <td>
-        <div class="monto-num"><?= esc($montoFormato) ?></div>
-        <div class="monto-letras"><?= esc($montoLetras) ?></div>
+        <span class="monto-num"><?= esc($montoFormato) ?></span>
+        <span class="monto-letras"><?= esc($montoLetras) ?></span>
       </td>
     </tr>
   </table>
 
-  <!-- Pie: firma + QR -->
+  <!-- Pie: firma + QR + sello digital -->
   <?php $urlValidacion = base_url('validar-pago/' . $pago['sello_digital']); ?>
   <table class="pie-table">
     <tr>
-      <td style="vertical-align:bottom; text-align:left;">
+      <td style="width:160pt; vertical-align:bottom; text-align:left;">
         <div class="firma-linea"></div>
         Firma y Sello
       </td>
+      <td style="vertical-align:middle; text-align:center;">
+        <img src="https://api.qrserver.com/v1/create-qr-code/?size=100x100&data=<?= urlencode($urlValidacion) ?>"
+             style="width:60pt; height:60pt; display:block; margin:0 auto; border:0.5pt solid #ccc; padding:1pt;">
+        <div class="qr-label">VERIFICAR AUTENTICIDAD</div>
+      </td>
+      <td style="width:160pt;"></td>
+    </tr>
+    <tr>
+      <td colspan="3" style="padding-top:3pt; border-top:0.5pt solid #ddd; font-size:6pt; color:#bbb; word-wrap:break-word; word-break:break-all; line-height:1.4;">
+        <strong>SELLO DIGITAL:</strong> <?= esc($selloDigital) ?>
+      </td>
     </tr>
   </table>
-  <div style="text-align:center; margin-top:-2pt;">
-    <img src="https://api.qrserver.com/v1/create-qr-code/?size=100x100&data=<?= urlencode($urlValidacion) ?>"
-         style="width:60pt; height:60pt; display:block; margin:0 auto; border:0.5pt solid #ccc; padding:1pt;">
-    <div class="qr-label">VERIFICAR AUTENTICIDAD</div>
-  </div>
-
-  <!-- Sello Digital de Seguridad -->
-  <div class="sello-digital">
-    <strong>SELLO DIGITAL:</strong> <?= esc($selloDigital) ?>
-  </div>
 
 </div>
 <!-- fin sección -->

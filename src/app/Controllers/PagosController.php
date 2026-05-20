@@ -407,6 +407,12 @@ class PagosController extends BaseController
             return $this->registrarMensualidades($mesesPago, $fechaPagoReal);
         }
 
+        // ── Ruta de materias posgrado (multi-materia) ────────────────
+        $materiasPago = $this->request->getPost('materias_pago') ?? [];
+        if ($concepto === 'mensualidad' && $this->request->getPost('nivel') === 'posgrado' && ! empty($materiasPago)) {
+            return $this->registrarMaterias($materiasPago);
+        }
+
         // ── Ruta existente (inscripcion, reinscripcion, tramite, mensualidad legacy) ─
         $periodoNum = $this->request->getPost('periodo_pago') ?: null;
 
@@ -494,17 +500,18 @@ class PagosController extends BaseController
         $numAbono        = $this->request->getPost('num_abono') ? (int) $this->request->getPost('num_abono') : null;
         $monto           = $this->request->getPost('monto');
         $montosPago      = $this->request->getPost('montos_pago') ?? [];
+        $abonosPago      = $this->request->getPost('abonos_pago') ?? [];
 
-        // Validar que ningún mes seleccionado tenga ya un pago completo
         $db = \Config\Database::connect();
         $mesesNombres = ['Enero','Febrero','Marzo','Abril','Mayo','Junio',
                          'Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
 
-        foreach ($mesesPago as $mes) {
+        // Validar que ningún mes con pago completo tenga ya uno registrado
+        foreach ($mesesPago as $i => $mes) {
             $mes = (int) $mes;
+            $numAbonoMes = $this->resolverAbono($abonosPago, $i, $numAbono);
 
-            // Solo bloquear duplicado cuando es pago completo (sin abono)
-            if ($numAbono === null) {
+            if ($numAbonoMes === null) {
                 $existe = $db->table('pagos')
                     ->where('num_control', $numControl)
                     ->where('nivel', $nivel)
@@ -544,7 +551,6 @@ class PagosController extends BaseController
             'tipo_periodo'     => null,
             'fecha_pago_real'  => $fechaPagoReal,
             'anio_mensualidad' => $anioMensualidad,
-            'num_abono'        => $numAbono,
             'id_cajero'        => service('session')->get('id_usuario'),
             'metodo_pago'      => $this->request->getPost('metodo_pago') ?: 'Efectivo',
             'observaciones'    => $this->request->getPost('observaciones') ?: null,
@@ -555,10 +561,15 @@ class PagosController extends BaseController
         $primerFolio = null;
 
         foreach ($mesesPago as $i => $mes) {
+            $numAbonoMes = $this->resolverAbono($abonosPago, $i, $numAbono);
             $montoMes = isset($montosPago[$i]) && $montosPago[$i] !== ''
                 ? (float) $montosPago[$i]
                 : (float) $monto;
-            $data = array_merge($baseData, ['periodo_pago' => (int) $mes, 'monto' => $montoMes]);
+            $data = array_merge($baseData, [
+                'periodo_pago' => (int) $mes,
+                'monto'        => $montoMes,
+                'num_abono'    => $numAbonoMes,
+            ]);
 
             if (! $model->insert($data)) {
                 if ($this->request->isAJAX()) {
@@ -575,6 +586,120 @@ class PagosController extends BaseController
             $inserted     = $model->find($insertId);
             $folio        = date('Ymd') . '-' . $insertId . '-' . strtoupper(substr(bin2hex(random_bytes(3)), 0, 6));
             $sello        = hash('sha256', $folio . $inserted['created_at'] . 'LLAVE_SECRETA');
+
+            $model->update($insertId, ['folio_digital' => $folio, 'sello_digital' => $sello]);
+
+            if ($primerFolio === null) {
+                $primerFolio = $folio;
+            }
+        }
+
+        $pdfUrl = $folioLote !== null
+            ? base_url('pagos/comprobante-lote/' . $folioLote)
+            : base_url('pagos/comprobante/' . $primerFolio);
+
+        if ($this->request->isAJAX()) {
+            return $this->response->setJSON([
+                'success'       => true,
+                'folio_digital' => $primerFolio,
+                'folio_lote'    => $folioLote,
+                'pdf_url'       => $pdfUrl,
+                'csrf_name'     => csrf_token(),
+                'csrf_hash'     => csrf_hash(),
+            ]);
+        }
+
+        return redirect()->to($pdfUrl);
+    }
+
+    private function resolverAbono(array $abonosPago, int $i, ?int $fallback): ?int
+    {
+        if (!empty($abonosPago)) {
+            return (isset($abonosPago[$i]) && $abonosPago[$i] !== '') ? (int) $abonosPago[$i] : null;
+        }
+        return $fallback;
+    }
+
+    // ── Registro multi-materia posgrado: un registro por cada materia ─
+    private function registrarMaterias(array $materiasPago): \CodeIgniter\HTTP\ResponseInterface
+    {
+        $numControl = $this->request->getPost('num_control');
+        $nivel      = $this->request->getPost('nivel');
+        $monto      = $this->request->getPost('monto');
+        $montosMat  = $this->request->getPost('montos_pago_materia') ?? [];
+
+        $db = \Config\Database::connect();
+        foreach ($materiasPago as $materia) {
+            $existe = $db->table('pagos')
+                ->where('num_control', $numControl)
+                ->where('nivel', 'posgrado')
+                ->where('concepto', 'mensualidad')
+                ->where('detalle_tramite', $materia)
+                ->where('num_abono IS NULL', null, false)
+                ->countAllResults();
+
+            if ($existe > 0) {
+                if ($this->request->isAJAX()) {
+                    return $this->response->setStatusCode(422)->setJSON([
+                        'success' => false,
+                        'message' => "La materia \"{$materia}\" ya tiene un pago completo registrado.",
+                    ]);
+                }
+                session()->setFlashdata('error', "La materia \"{$materia}\" ya tiene un pago completo registrado.");
+                return redirect()->to(base_url('pagos'));
+            }
+        }
+
+        $model     = new PagoModel();
+        $folioLote = count($materiasPago) > 1
+            ? 'L' . date('Ymd') . strtoupper(substr(bin2hex(random_bytes(4)), 0, 8))
+            : null;
+
+        $baseData = [
+            'num_control'      => $numControl,
+            'nivel'            => $nivel,
+            'nombre_alumno'    => $this->request->getPost('nombre_alumno'),
+            'modalidad'        => $this->request->getPost('modalidad') ?: null,
+            'carrera'          => $this->request->getPost('carrera') ?: null,
+            'concepto'         => 'mensualidad',
+            'tipo_periodo'     => null,
+            'periodo_pago'     => null,
+            'fecha_pago_real'  => null,
+            'num_abono'        => null,
+            'id_cajero'        => service('session')->get('id_usuario'),
+            'metodo_pago'      => $this->request->getPost('metodo_pago') ?: 'Efectivo',
+            'observaciones'    => $this->request->getPost('observaciones') ?: null,
+            'mes_inicio_ciclo' => null,
+            'folio_lote'       => $folioLote,
+        ];
+
+        $primerFolio = null;
+
+        foreach ($materiasPago as $i => $materia) {
+            $montoMat = isset($montosMat[$i]) && $montosMat[$i] !== ''
+                ? (float) $montosMat[$i]
+                : (float) $monto;
+
+            $data = array_merge($baseData, [
+                'detalle_tramite' => $materia,
+                'monto'           => $montoMat,
+            ]);
+
+            if (! $model->insert($data)) {
+                if ($this->request->isAJAX()) {
+                    return $this->response->setStatusCode(422)->setJSON([
+                        'success' => false,
+                        'message' => 'Error al guardar el pago. Intente de nuevo.',
+                    ]);
+                }
+                session()->setFlashdata('error', 'Error al guardar el pago. Intente de nuevo.');
+                return redirect()->to(base_url('pagos'));
+            }
+
+            $insertId = $model->getInsertID();
+            $inserted = $model->find($insertId);
+            $folio    = date('Ymd') . '-' . $insertId . '-' . strtoupper(substr(bin2hex(random_bytes(3)), 0, 6));
+            $sello    = hash('sha256', $folio . $inserted['created_at'] . 'LLAVE_SECRETA');
 
             $model->update($insertId, ['folio_digital' => $folio, 'sello_digital' => $sello]);
 
@@ -752,19 +877,35 @@ class PagosController extends BaseController
                      ->where('id', $pago['id_cajero'])
                      ->get()->getRowArray();
 
-        $mesesNombres = ['Enero','Febrero','Marzo','Abril','Mayo','Junio',
-                         'Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
+        $niveles            = ['uni' => 'Universidad', 'prepa' => 'Preparatoria', 'posgrado' => 'Posgrado'];
+        $mesesNombres       = ['Enero','Febrero','Marzo','Abril','Mayo','Junio',
+                               'Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
+        $esPosgradoMateria  = $pago['nivel'] === 'posgrado' && $pago['concepto'] === 'mensualidad';
 
-        $mesesDisplay = [];
         $montoTotal   = 0;
+        $itemsDisplay = [];
         foreach ($pagos as $p) {
-            $mesNom         = $mesesNombres[((int) $p['periodo_pago']) - 1] ?? '?';
-            $anioP          = $p['anio_mensualidad'] ?? date('Y', strtotime($p['created_at']));
-            $mesesDisplay[] = $mesNom . ' ' . $anioP;
-            $montoTotal    += (float) $p['monto'];
+            $montoTotal += (float) $p['monto'];
+            if ($esPosgradoMateria) {
+                $itemsDisplay[] = [
+                    'label' => $p['detalle_tramite'] ?? '—',
+                    'monto' => (float) $p['monto'],
+                    'abono' => null,
+                ];
+            } else {
+                $mesNom         = $mesesNombres[((int) $p['periodo_pago']) - 1] ?? '?';
+                $anioP          = $p['anio_mensualidad'] ?? date('Y', strtotime($p['created_at']));
+                $itemsDisplay[] = [
+                    'label' => $mesNom . ' ' . $anioP,
+                    'monto' => (float) $p['monto'],
+                    'abono' => $p['num_abono'] ?? null,
+                ];
+            }
         }
 
-        $niveles   = ['uni' => 'Universidad', 'prepa' => 'Preparatoria', 'posgrado' => 'Posgrado'];
+        $conceptoLabel     = $esPosgradoMateria ? 'Materias' : 'Mensualidades';
+        $conceptoSubtitulo = ($niveles[$pago['nivel']] ?? $pago['nivel'])
+            . ($esPosgradoMateria ? ' — Materias' : ' — Mensualidades');
         $logoMap   = ['uni' => 'logosuni.jpeg', 'prepa' => 'logosba.jpeg', 'posgrado' => 'logosuni.jpeg'];
         $logoFile  = FCPATH . 'assets/img/' . ($logoMap[$pago['nivel']] ?? '');
         $logoBase64 = null;
@@ -774,17 +915,20 @@ class PagosController extends BaseController
         }
 
         $viewData = [
-            'pagos'         => $pagos,
-            'pago'          => $pago,
-            'mesesDisplay'  => implode(', ', $mesesDisplay),
-            'montoTotal'    => $montoTotal,
-            'nivelLabel'    => $niveles[$pago['nivel']] ?? $pago['nivel'],
-            'fechaHora'     => date('d/m/Y H:i:s', strtotime($pago['created_at'])),
-            'montoFormato'  => '$' . number_format($montoTotal, 2),
-            'montoLetras'   => $this->numeroALetras($montoTotal),
-            'nombreCajero'  => $cajero['nombre'] ?? 'N/D',
-            'logoBase64'    => $logoBase64,
-            'folio_lote'    => $lote,
+            'pagos'              => $pagos,
+            'pago'               => $pago,
+            'itemsDisplay'       => $itemsDisplay,
+            'conceptoLabel'      => $conceptoLabel,
+            'conceptoSubtitulo'  => $conceptoSubtitulo,
+            'esPosgradoMateria'  => $esPosgradoMateria,
+            'montoTotal'         => $montoTotal,
+            'nivelLabel'         => $niveles[$pago['nivel']] ?? $pago['nivel'],
+            'fechaHora'          => date('d/m/Y H:i:s', strtotime($pago['created_at'])),
+            'montoFormato'       => '$' . number_format($montoTotal, 2),
+            'montoLetras'        => $this->numeroALetras($montoTotal),
+            'nombreCajero'       => $cajero['nombre'] ?? 'N/D',
+            'logoBase64'         => $logoBase64,
+            'folio_lote'         => $lote,
         ];
 
         $options = new Options();

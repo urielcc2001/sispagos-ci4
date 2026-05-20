@@ -137,11 +137,14 @@ body {
     font-size: 16pt;
     font-weight: bold;
     color: #003087;
+    display: inline;
 }
 .monto-letras {
     font-size: 8.5pt;
     color: #444;
-    margin-top: 1pt;
+    display: inline;
+    margin-left: 5pt;
+    vertical-align: middle;
 }
 
 .pie-table {
@@ -241,14 +244,20 @@ foreach ($copias as $copia):
       <td class="lbl">Cajero</td>
       <td class="val"><?= esc($nombreCajero) ?></td>
     </tr>
+    <?php if (! empty($pago['observaciones'])): ?>
+    <tr>
+      <td class="lbl">Observaciones</td>
+      <td class="val" colspan="3"><?= esc($pago['observaciones']) ?></td>
+    </tr>
+    <?php endif; ?>
   </table>
 
   <!-- Monto -->
   <table class="monto-table">
     <tr>
       <td>
-        <div class="monto-num"><?= esc($montoFormato) ?></div>
-        <div class="monto-letras"><?= esc($montoLetras) ?></div>
+        <span class="monto-num"><?= esc($montoFormato) ?></span>
+        <span class="monto-letras"><?= esc($montoLetras) ?></span>
       </td>
     </tr>
   </table>

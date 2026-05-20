@@ -114,8 +114,8 @@ body {
     background: #eef2f9;
 }
 .monto-table td { padding: 2pt 8pt; vertical-align: middle; }
-.monto-num { font-size: 16pt; font-weight: bold; color: #003087; }
-.monto-letras { font-size: 8.5pt; color: #444; margin-top: 1pt; }
+.monto-num { font-size: 16pt; font-weight: bold; color: #003087; display: inline; }
+.monto-letras { font-size: 8.5pt; color: #444; display: inline; margin-left: 5pt; vertical-align: middle; }
 .pie-table { width: 100%; border-collapse: collapse; margin-top: 3pt; }
 .pie-table td { font-size: 7.5pt; color: #888; vertical-align: bottom; padding-bottom: 0; }
 .firma-linea {
@@ -139,9 +139,6 @@ body {
 <body>
 
 <?php
-$mesesNombres = ['Enero','Febrero','Marzo','Abril','Mayo','Junio',
-                 'Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
-
 $copias = ['COPIA PARA EL ALUMNO', 'COPIA PARA EL CAJERO'];
 foreach ($copias as $copia):
 ?>
@@ -164,7 +161,7 @@ foreach ($copias as $copia):
     <tr>
       <td class="enc-titulo-td">
         <div class="titulo-doc">COMPROBANTE DE PAGO</div>
-        <div class="subtitulo-doc"><?= esc($nivelLabel) ?> — Mensualidades</div>
+        <div class="subtitulo-doc"><?= esc($conceptoSubtitulo) ?></div>
       </td>
       <td class="enc-copia-td">
         <div class="copia-badge"><?= $copia ?></div>
@@ -198,35 +195,34 @@ foreach ($copias as $copia):
     </tr>
     <tr>
       <td class="lbl">Concepto</td>
-      <td class="val">Mensualidades</td>
+      <td class="val"><?= esc($conceptoLabel) ?></td>
       <td class="lbl">Cajero</td>
       <td class="val"><?= esc($nombreCajero) ?></td>
     </tr>
+    <?php if (! empty($pago['observaciones'])): ?>
+    <tr>
+      <td class="lbl">Observaciones</td>
+      <td class="val" colspan="3"><?= esc($pago['observaciones']) ?></td>
+    </tr>
+    <?php endif; ?>
   </table>
 
-  <!-- Detalle de meses pagados (horizontal) -->
+  <!-- Detalle de conceptos pagados (horizontal) -->
   <table class="meses-table" style="margin-top:4pt;">
     <thead>
       <tr>
-        <?php foreach ($pagos as $p):
-          $mesNum = (int)$p['periodo_pago'];
-          $mesAb  = substr($mesesNombres[$mesNum - 1] ?? "M{$mesNum}", 0, 3);
-          $anioP  = $p['anio_mensualidad'] ?? date('Y', strtotime($p['created_at']));
-        ?>
-        <th style="text-align:center; font-size:8.5pt; width:1%; white-space:nowrap;">
-          <?= esc($mesAb) ?> <?= $anioP ?>
-          <?php if (!empty($p['num_abono'])): ?>
-            <br><span style="font-size:6.5pt; font-weight:normal; color:#555;">Ab.<?= (int)$p['num_abono'] ?></span>
-          <?php endif; ?>
+        <?php foreach ($itemsDisplay as $item): ?>
+        <th style="text-align:center; font-size:<?= $esPosgradoMateria ? '6.5pt' : '8.5pt' ?>; width:1%; white-space:<?= $esPosgradoMateria ? 'normal' : 'nowrap' ?>; max-width:<?= $esPosgradoMateria ? '70pt' : 'none' ?>;">
+          <?= esc($item['label']) ?><?php if (!empty($item['abono'])): ?> <span style="font-size:6.5pt; font-weight:normal; color:#555;">Ab.<?= (int)$item['abono'] ?></span><?php endif; ?>
         </th>
         <?php endforeach; ?>
       </tr>
     </thead>
     <tbody>
       <tr>
-        <?php foreach ($pagos as $p): ?>
+        <?php foreach ($itemsDisplay as $item): ?>
         <td style="text-align:center; font-size:8.5pt; width:1%; white-space:nowrap;">
-          $<?= number_format((float)$p['monto'], 2) ?>
+          $<?= number_format($item['monto'], 2) ?>
         </td>
         <?php endforeach; ?>
       </tr>
@@ -237,8 +233,8 @@ foreach ($copias as $copia):
   <table class="monto-table">
     <tr>
       <td>
-        <div class="monto-num"><?= esc($montoFormato) ?></div>
-        <div class="monto-letras"><?= esc($montoLetras) ?></div>
+        <span class="monto-num"><?= esc($montoFormato) ?></span>
+        <span class="monto-letras"><?= esc($montoLetras) ?></span>
       </td>
     </tr>
   </table>
