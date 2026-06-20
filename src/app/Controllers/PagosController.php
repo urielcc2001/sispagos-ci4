@@ -435,7 +435,7 @@ class PagosController extends BaseController
         $numAbono = $this->request->getPost('num_abono') ? (int) $this->request->getPost('num_abono') : null;
 
         $data = [
-            'num_control'      => $this->request->getPost('num_control'),
+            'num_control'      => trim($this->request->getPost('num_control')),
             'nivel'            => $this->request->getPost('nivel'),
             'nombre_alumno'    => $this->request->getPost('nombre_alumno'),
             'modalidad'        => $this->request->getPost('modalidad') ?: null,
@@ -494,7 +494,7 @@ class PagosController extends BaseController
 
     private function registrarMensualidades(array $mesesPago, ?string $fechaPagoReal): \CodeIgniter\HTTP\ResponseInterface
     {
-        $numControl      = $this->request->getPost('num_control');
+        $numControl      = trim($this->request->getPost('num_control'));
         $nivel           = $this->request->getPost('nivel');
         $anioMensualidad = (int) ($this->request->getPost('anio_mensualidad') ?: date('Y'));
         $numAbono        = $this->request->getPost('num_abono') ? (int) $this->request->getPost('num_abono') : null;
@@ -623,7 +623,7 @@ class PagosController extends BaseController
     // ── Registro multi-materia posgrado: un registro por cada materia ─
     private function registrarMaterias(array $materiasPago): \CodeIgniter\HTTP\ResponseInterface
     {
-        $numControl = $this->request->getPost('num_control');
+        $numControl = trim($this->request->getPost('num_control'));
         $nivel      = $this->request->getPost('nivel');
         $monto      = $this->request->getPost('monto');
         $montosMat  = $this->request->getPost('montos_pago_materia') ?? [];

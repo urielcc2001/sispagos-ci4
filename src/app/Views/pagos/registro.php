@@ -601,6 +601,7 @@ $(function () {
     $.get(BASE_URL + 'pagos/buscar-alumno', { num_control: numControl, nivel: nivel })
       .done(function (res) {
         if (res.found) {
+          $('#num_control').prop('readonly', true).addClass('bg-light');
           $('#nombre_alumno').val(res.nombre).addClass('is-valid');
           $('#carrera').val(res.carrera ?? '');
           if (nivel === 'posgrado') {
@@ -1836,7 +1837,8 @@ $(function () {
 
   // ── Helpers ─────────────────────────────────────────────────────
   function resetAlumnoFields() {
-    $('#num_control, #nombre_alumno, #carrera, #txt-modalidad, #modalidad_val').val('');
+    $('#num_control').prop('readonly', false).removeClass('bg-light').val('');
+    $('#nombre_alumno, #carrera, #txt-modalidad, #modalidad_val').val('');
     $('#sel-modalidad-prepa').val('');
     $('#msg-error-alumno').hide();
     $('#alerta-adeudos').hide();
